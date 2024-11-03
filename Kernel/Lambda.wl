@@ -40,6 +40,7 @@ LambdaBLC;
 BLCLambda;
 
 TagLambda;
+UntagLambda;
 ColorizeLambda;
 LambdaSmiles;
 LambdaDiagram;
@@ -254,6 +255,9 @@ TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = Ta
 TagLambda[expr_, form_String : "Alphabet"] := expr /. lambda_\[FormalLambda] :> TagLambda[lambda, form]
 
 ResourceFunction["AddCodeCompletion"]["TagLambda"][None, {"Alphabet", "Unique"}]
+
+
+UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> \[FormalLambda], Interpretation[x_, _] :> x}
 
 
 LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[expr, "Alphabet"]] //. {Interpretation["\[Lambda]", x_][body_] :> Function[x, body], Interpretation[_Integer, x_] :> x})

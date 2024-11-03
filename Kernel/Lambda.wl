@@ -34,6 +34,7 @@ LambdaString;
 LambdaFunction;
 FunctionLambda;
 LambdaTree;
+LambdaGraph;
 LambdaConvert;
 ParseLambda;
 LambdaBLC;
@@ -293,6 +294,37 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{colors = <||>},
 		TreeElementLabel -> TreeCases[Application] -> OptionValue["ApplicationLabel"],
 		TreeElementShapeFunction -> TreeCases[Application] -> None,
 		TreeElementLabelFunction -> If[TrueQ[OptionValue["ArgumentLabels"]], Automatic, {"NonLeaves" -> Function[If[# === Application, OptionValue["ApplicationLabel"], "\[Lambda]"]]}]
+	]
+]
+
+LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda, "Colored" -> True, "ArgumentLabels" -> False]},
+	VertexReplace[
+		TreeGraph[
+			TreeMap[
+				\[FormalL], 
+				tree,
+				"Leaves"
+			],
+			VertexCoordinates -> GraphEmbedding[tree]
+		]
+		,
+		{
+			{\[FormalL][v_], _} :> Interpreter[v, {}],
+			{Application, pos_} :> Interpreter["@", pos],
+			{_, pos_} :> Interpreter["\[Lambda]", pos]
+		}
+		,
+		opts,
+		(* VertexShapeFunction -> Trees`$TreeVertexShapeFunction, *)
+		VertexShapeFunction -> Function[
+			Trees`$TreeVertexShapeFunction[
+				First[#2],
+				Directive[Trees`$TreeVertexColor, Trees`$TreeVertexFrameStyle],
+				MatchQ[#2, Except[{_, {1, ___}}]]
+			][##]
+		],
+		EdgeShapeFunction -> Trees`$TreeEdgeShapeFunction,
+		EdgeStyle -> Trees`$TreeEdgeColor
 	]
 ]
 

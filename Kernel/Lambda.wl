@@ -365,11 +365,12 @@ BalancedParenthesesQ[str_] := FixedPoint[StringDelete["()"], StringDelete[str, E
 
 ParseVariableLambda[str_String, vars_Association : <||>] := First @ StringCases[str, {
 	WhitespaceCharacter ... ~~ "\[Lambda]" ~~ WhitespaceCharacter ... ~~ var : WordCharacter .. ~~ WhitespaceCharacter ... ~~ "." ~~ WhitespaceCharacter ... ~~ body__ :>
-		\[FormalLambda][ParseVariableLambda[body, <|vars + 1, var -> 1|>]],
-	f__ ~~ WhitespaceCharacter ... ~~ x__ /; ! StringMatchQ[x, WhitespaceCharacter ..] && BalancedParenthesesQ[f] && BalancedParenthesesQ[x] :>
-		ParseVariableLambda[f, vars][ParseVariableLambda[x, vars]],
+		Interpretation["\[Lambda]", var][ParseVariableLambda[body, <|vars + 1, var -> 1|>]],
+	f__ ~~ WhitespaceCharacter ... ~~ x__ /; ! StringMatchQ[x, WhitespaceCharacter ..] &&
+		! StringEndsQ[f, ("\[Lambda]" | ".") ~~ WhitespaceCharacter ...] && ! StringStartsQ[x, "."] && ! StringEndsQ[x, ("\[Lambda]" | ".") ~~ WhitespaceCharacter ...] &&
+		BalancedParenthesesQ[f] && BalancedParenthesesQ[x] :> ParseVariableLambda[f, vars][ParseVariableLambda[x, vars]],
 	"(" ~~ term__ ? BalancedParenthesesQ ~~ ")" :> ParseVariableLambda[term, vars],
-	var : WordCharacter .. :> Replace[var, vars]
+	var : WordCharacter .. :> Interpretation[Evaluate[Replace[var, vars]], var]
 }]
 
 ParseIndexLambda[str_String] := First @ StringCases[str, {
@@ -446,11 +447,11 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 				If[
 					TrueQ[OptionValue["StandardForm"]],
 					If[ argQ,
-						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Replace[First[xs], {(\[FormalLambda][tag_] -> _) :> Splice[{"Arg"[tag] -> 0, ","}], _ -> Nothing}], Rest[xs], "]"}],
+						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Replace[First[xs], {(\[FormalLambda][tag_] -> _) :> Splice[{"Arg"[tag] -> 0, "."}], _ -> Nothing}], Rest[xs], "]"}],
 						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Rest[xs], "]"}]
 					],
 					If[ argQ,
-						If[Length[xs] == 1, {"(", First[xs], ")"}, {First[xs], "(", Replace[First[xs], {(\[FormalLambda][tag_] -> _) :> Splice[{"Arg"[tag] -> 0, ","}], _ -> Nothing}], Splice[Rest[xs]], ")"}],
+						If[Length[xs] == 1, {"(", First[xs], ")"}, {First[xs], "(", Replace[First[xs], {(\[FormalLambda][tag_] -> _) :> Splice[{"Arg"[tag] -> 0, "."}], _ -> Nothing}], Splice[Rest[xs]], ")"}],
 						{"(", Splice[xs], ")"}
 					]
 				]
@@ -471,8 +472,8 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 		MapAt[Style[#[[If[argQ, 2, 1]]], Lookup[colors, #[[2]], Black]] &, varPos] //
 		MapAt[Style[#[[1, 1]], Lookup[colors, #[[1, 1]], Black]] &, argPos];
 	
-	arrows = MapThread[With[{dh = Ceiling[#1[[1]] / 2], sign = (-1) ^ Boole[EvenQ[#1[[1]]]], l = If[argQ, args, lambdas][#1[[2]]]},
-		If[MissingQ[l], Nothing, {colors[#1[[2]]], Line[Threaded[{spacing, sign}] * {{#2, 1}, {#2, 1 + dh / (l[[2]] + 1)}, {l[[1]], 1 + dh / (l[[2]] + 1)}, {l[[1]], 1}}]}]] &,
+	arrows = MapThread[With[{dh = Ceiling[#1[[1]] / 2], sign = (-1) ^ Boole[EvenQ[#1[[1]]]], h = If[argQ, args, lambdas][#1[[2]]], l = lambdas[#1[[2]]]},
+		If[MissingQ[l] || MissingQ[h], Nothing, {colors[#1[[2]]], Line[Threaded[{spacing, sign}] * {{#2, 1}, {#2, 1 + dh / (l[[2]] + 1)}, {h[[1]], 1 + dh / (l[[2]] + 1)}, {h[[1]], 1}}]}]] &,
 		{vars, First /@ varPos}
 	];
 	Graphics[{

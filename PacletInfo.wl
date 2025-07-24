@@ -7,7 +7,7 @@ PacletObject[
     "Creator" -> "Nik Murzin",
     "License" -> "MIT",
     "PublisherID" -> "Wolfram",
-    "Version" -> "1.0.14",
+    "Version" -> "1.0.15",
     "WolframVersion" -> "13.1+",
     "PrimaryContext" -> "Wolfram`Lambda`",
     "DocumentationURL" -> "https://resources.wolframcloud.com/PacletRepository/resources",
@@ -29,15 +29,21 @@ PacletObject[
           "Wolfram`Lambda`FunctionLambda",
           "Wolfram`Lambda`LambdaTree",
           "Wolfram`Lambda`LambdaGraph",
+          "Wolfram`Lambda`LambdaApplication",
+          "Wolfram`Lambda`LambdaBrackets",
           "Wolfram`Lambda`LambdaFunction",
+          "Wolfram`Lambda`LambdaString",
           "Wolfram`Lambda`LambdaCombinator",
+          "Wolfram`Lambda`CombinatorLambda",
           "Wolfram`Lambda`ColorizeLambda",
           "Wolfram`Lambda`LambdaSmiles",
           "Wolfram`Lambda`LambdaDiagram",
           "Wolfram`Lambda`LambdaConvert",
           "Wolfram`Lambda`ParseLambda",
           "Wolfram`Lambda`TagLambda",
-          "Wolfram`Lambda`UntagLambda"
+          "Wolfram`Lambda`UntagLambda",
+          "Wolfram`Lambda`BLCLambda",
+          "Wolfram`Lambda`LambdaBLC"
         }
       },
       {

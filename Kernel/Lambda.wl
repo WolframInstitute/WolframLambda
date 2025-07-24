@@ -305,7 +305,7 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda,
 				tree,
 				"Leaves"
 			],
-			VertexCoordinates -> GraphEmbedding[tree]
+			VertexCoordinates -> GraphEmbedding[tree, "SymmetricLayeredEmbedding"]
 		]
 		,
 		{
@@ -333,11 +333,20 @@ LambdaApplication[lambda_, ___] := lambda //. (f : Except[\[FormalLambda]])[x_] 
 
 LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. "\[FormalLambda]" | "\[Application]" -> "\[InvisibleSpace]"]
 
-LambdaString[lambda_, ___] := TagLambda[lambda] //. {
-   	Interpretation["\[Lambda]", var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], LambdaString[body]],
+LambdaString[lambda_, "Variables"] := TagLambda[lambda] //. {
+   	Interpretation["\[Lambda]", var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], LambdaString[body, "Variables"]],
 	Interpretation[_, var_] :> ToString[Unevaluated[var]],
-	f_[x_] :> StringTemplate["(`` ``)"][LambdaString[f], LambdaString[x]]
+	f_[x_] :> StringTemplate["(`` ``)"][LambdaString[f, "Variables"], LambdaString[x, "Variables"]]
 }
+
+LambdaString[lambda_, "Indices"] := UntagLambda[lambda] //. {
+   	\[FormalLambda][body_] :> StringTemplate["(\[Lambda] ``)"][LambdaString[body, "Indices"]],
+	f_[x_] :> StringTemplate["(`` ``)"][LambdaString[f, "Indices"], LambdaString[x, "Indices"]]
+}
+
+LambdaString[lambda_, ___] := LambdaString[lambda, "Variables"]
+
+ResourceFunction["AddCodeCompletion"]["LambdaString"][None, {"Variables", "Indices"}]
 
 
 LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
@@ -351,6 +360,8 @@ LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 	LambdaCombinator[expr, args],
 	"Tree",
 	LambdaTree[expr, args],
+	"Graph",
+	LambdaGraph[expr, args],
 	"String",
 	LambdaString[expr, args],
 	"BLC",
@@ -358,7 +369,7 @@ LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 	_,
 	Missing[form]
 ]
-ResourceFunction["AddCodeCompletion"]["LambdaConvert"][None, {"Application", "BracketParens", "Function", "Combinator", "Tree", "String", "BLC"}]
+ResourceFunction["AddCodeCompletion"]["LambdaConvert"][None, {"Application", "BracketParens", "Function", "Combinator", "Tree", "Graph", "String", "BLC"}]
 
 
 BalancedParenthesesQ[str_] := FixedPoint[StringDelete["()"], StringDelete[str, Except["(" | ")"]]] === ""
@@ -407,9 +418,9 @@ blcLambda[bits : {___Integer}] :=
 		_ -> {Missing["UnrecognizedBits", bits], {}}
 	}]
 
-BLCLambda[bits : {___Integer}] := First[blcLambda[bits]]
+BLCLambda[bits : {(0 | 1) ...}] := First[blcLambda[bits]]
 
-BLCLambda[ba_ByteArray] := BLCLambda[Catenate[Reverse /@ IntegerDigits[Normal[ba], 2]]]
+BLCLambda[ba_ByteArray] := BLCLambda[Catenate[Reverse /@ IntegerDigits[Normal[ba], 2, 8]]]
 
 BLCLambda[n_Integer] := BLCLambda[ByteArray[{n}]]
 

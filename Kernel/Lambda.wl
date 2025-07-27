@@ -432,7 +432,7 @@ BLCLambda[expr_] := BLCLambda[BinarySerialize[expr]]
 
 
 ColorizeTaggedLambda[lambda_, colorFunction_ : ColorData[109]] := With[{lambdas = Cases[lambda, Interpretation["\[Lambda]", x_], All, Heads -> True]},
-	lambda /. MapThread[x : #1 | Interpretation[_Integer, Evaluate @ #1[[2]]] :> Style[x, Bold, #2] &, {lambdas, colorFunction /@ Range[Length[lambdas]]}]
+	lambda /. MapThread[x : #1 | ReplacePart[#1, 1 -> _Integer] :> Style[x, Bold, #2] &, {lambdas, colorFunction /@ Range[Length[lambdas]]}]
 ]
 
 

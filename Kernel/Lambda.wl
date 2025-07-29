@@ -42,6 +42,7 @@ BLCLambda;
 
 TagLambda;
 UntagLambda;
+LambdaDepths;
 ColorizeLambda;
 LambdaSmiles;
 LambdaDiagram;
@@ -502,20 +503,20 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 ]
 
 
-Options[LambdaDiagram] = Join[{"Dynamic" -> False, "Extend" -> False, "Pad" -> True, "Dots" -> All}, Options[Graphics]];
+Options[LambdaDiagram] = Join[{"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False}, Options[Graphics]];
 
-LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, pos_List : {}] := Block[{
-	w, h, lines, dh = Max[depths, -1] + Which[! extend && ! pad, 2, ! pad, 1, True, 0]
+LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, thick_ ? BooleanQ, pos_List : {}] := Block[{
+	w, h, lines, dh = Max[depths, -1] + If[thick, 0, 1], dw = If[thick, 2, 1]
 },
-	h = If[extend, 0, -1];
+	h = If[extend, 1, 0];
 	Replace[expr, {
 		Interpretation["\[Lambda]", tag_][body_] :> (
-			{w, lines} = LambdaDiagram[body, depths, extend, pad, Append[pos, 1]];
+			{w, lines} = LambdaDiagram[body, depths, extend, pad, thick, Append[pos, 1]];
 			lines = Join[{Labeled[{{0, w}, - Lookup[depths, tag]}, pos -> "Lambda"]}, lines]
 		),
 		f_[arg_] :> Block[{fw, fLines, argw, argLines, fPos, argPos, fVarx, fVary, argVarx, argVary},
-			{fw, fLines} = LambdaDiagram[f, If[pad, depths, KeyTake[depths, Cases[f, Interpretation[_, tag_] :> tag, All, Heads -> True]]], extend, pad, Append[pos, 0]];
-			{argw, argLines} = LambdaDiagram[arg, If[pad, depths, KeyTake[depths, Cases[arg, Interpretation[_, tag_] :> tag, All, Heads -> True]]], extend, pad, Append[pos, 1]];
+			{fw, fLines} = LambdaDiagram[f, If[pad, depths, KeyTake[depths, Cases[f, Interpretation[_, tag_] :> tag, All, Heads -> True]]], extend, pad, thick, Append[pos, 0]];
+			{argw, argLines} = LambdaDiagram[arg, If[pad, depths, KeyTake[depths, Cases[arg, Interpretation[_, tag_] :> tag, All, Heads -> True]]], extend, pad, thick, Append[pos, 1]];
 			fPos = Position[fLines, Labeled[_, _ -> "LambdaApplication" | "Application"]];
 			If[	! extend || fPos === {},
 				fPos = Append[1] @ FirstPosition[fLines, Labeled[{_, {_, _}}, _]]
@@ -532,30 +533,30 @@ LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, po
 			];
 			{argVarx, argVary} = Extract[argLines, argPos];
 			h += If[ extend,
-				Min[fVary, argVary[[2]]] - 1,
-				Max[fVary, argVary[[2]]] + 1
+				Min[fVary, argVary[[2]]] - 2,	
+				Max[fVary, argVary[[2]]]
 			];
 			fLines = ReplacePart[fLines, Join[fPos, {2, 2}] -> h];
 			argLines = ReplacePart[argLines, Join[argPos, {2, 2}] -> h];
-			argLines = Replace[argLines, Labeled[line_, label_] :> Labeled[line + {fw + 1, 0}, label], 1];
+			argLines = Replace[argLines, Labeled[line_, label_] :> Labeled[line + {fw + dw, 0}, label], 1];
 			lines = Join[
 				fLines,
-				{Labeled[{{fVarx, fw + argVarx + 1}, h}, pos -> If[MatchQ[f, Interpretation["\[Lambda]", _][_]], "LambdaApplication", "Application"]]},
+				{Labeled[{{fVarx, fw + argVarx + dw}, h}, pos -> If[MatchQ[f, Interpretation["\[Lambda]", _][_]], "LambdaApplication", "Application"]]},
 				argLines
 			];
-			w = fw + argw + 1;
+			w = fw + argw + dw;
 		],
 		Interpretation[var_Integer, depth_Integer] :> (
-			w = 0; h -= dh;
-			lines = {Labeled[{0, {var - depth, h}}, pos -> "FreeVariable"]}
+			w = 0;
+			lines = {Labeled[{0, {var - depth, depth - 1}}, pos -> "FreeVariable"]}
 		),
-		Interpretation[_Integer, tag_Symbol] :> (
-			w = 0; h -= dh;
-			lines = {Labeled[{0, {- Lookup[depths, tag, -1], h}}, pos -> "Variable"]}
-		),
+		Interpretation[var_Integer, tag_] :> With[{depth = Lookup[depths, tag, -1]},
+			w = 0;
+			lines = {Labeled[{0, {- depth, - dh}}, pos -> "Variable"]}
+		],
 		_ :> (
-			w = 0; h -= dh;
-			lines = {Labeled[{0, {1, h}}, pos -> "Constant"]}
+			w = 0;
+			lines = {Labeled[{0, {1, - dh}}, pos -> "Constant"]}
 		)
 	}];
 	
@@ -574,23 +575,36 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 			Identity
 		] @ expr
 	],
-	lambda = TagLambda[expr], depths, lines, dots
+	lambda = TagLambda[UntagLambda[expr]], depths, lines, dots,
+	pointFunction = If[TrueQ[OptionValue["Thick"]],
+		Function[{}],
+		Function[Point[#]]
+	],
+	lineFunction = If[TrueQ[OptionValue["Thick"]],
+		Function[Rectangle @@ Replace[#1, {
+			(* Horizontal *)
+			{{x_, y_}, {z_, y_}} :> With[{shift = If[#2 === "Lambda", 3 / 4, 1 / 4]}, {{x - shift, y - 1 / 4}, {z + shift, y + 1 / 4}}],
+			(* Vertical *)
+			{{x_, y_}, {x_, z_}} :> {{x - 1 / 4, y - 1 / 4}, {x + 1 / 4, z}}
+		}]],
+		Function[Line[#]]
+	]
 },
 	depths = Association @ Reap[LambdaDepths[lambda]][[2]];
 	lines = SortBy[
-		LambdaDiagram[lambda, depths, TrueQ[OptionValue["Extend"]], TrueQ[OptionValue["Pad"]]][[2]],
+		LambdaDiagram[lambda, depths, TrueQ[OptionValue["Extend"]], TrueQ[OptionValue["Pad"]], TrueQ[OptionValue["Thick"]]][[2]],
 		MatchQ[Labeled[{{_, _}, _}, _ -> "LambdaApplication"]]
 	];
 	dots = Switch[OptionValue["Dots"],
 		All,
 		{
 			PointSize[Large],
-			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> type_] :> Tooltip[Point[{x, y}], makeTooltip[pos, type]]]
+			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> type_] :> Tooltip[pointFunction[{x, y}], makeTooltip[pos, type]]]
 		},
 		True | Automatic,
 		{
 			PointSize[Large],
-			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> Tooltip[Point[{x, y}], makeTooltip[pos, "Lambda"]]]
+			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> Tooltip[pointFunction[{x, y}], makeTooltip[pos, "Lambda"]]]
 		},
 		False | None,
 		Nothing
@@ -600,9 +614,9 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		With[{boxId = Unique[Symbol["LambdaDiagram"]]},
 			DynamicModule[{style = ConstantArray[Thickness[Medium], Length[lines]]},
 				Graphics[{
-					MapIndexed[With[{i = #2[[1]]},
+					MapIndexed[With[{i = #2[[1]], f = lineFunction},
 						Replace[#1, Labeled[line_, pos_ -> type_] :> With[{
-							primitive = Tooltip[Dynamic @ {If[type === "LambdaApplication", Directive[Dashed, AbsoluteThickness[3]], Nothing], style[[i]], Line[Thread[line]]}, makeTooltip[pos, type]]
+							primitive = Tooltip[Dynamic @ {If[type === "LambdaApplication", Directive[Dashed, AbsoluteThickness[3]], Nothing], style[[i]], f[Thread[line], type]}, makeTooltip[pos, type]]
 						},
 							EventHandler[primitive,
 								{
@@ -630,7 +644,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		,
 		Graphics[{
 			Replace[lines,
-				Labeled[line_, pos_ -> type_] :> Tooltip[Line[Thread[line]], makeTooltip[pos, type]],
+				Labeled[line_, pos_ -> type_] :> Tooltip[lineFunction[Thread[line], type], makeTooltip[pos, type]],
 				1
 			],
 			dots

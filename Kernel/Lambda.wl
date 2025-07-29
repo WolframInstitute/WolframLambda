@@ -430,8 +430,9 @@ BLCLambda[ds_DataStructure] /; DataStructureQ[ds, "BitVector"] := BLCLambda[Bool
 
 BLCLambda[expr_] := BLCLambda[BinarySerialize[expr]]
 
+$DefaultColorFunction = Function[Darker[ColorData[96][#], .1]]
 
-ColorizeTaggedLambda[lambda_, colorFunction_ : ColorData[109]] := With[{lambdas = Cases[lambda, Interpretation["\[Lambda]", x_], All, Heads -> True]},
+ColorizeTaggedLambda[lambda_, colorFunction_ : $DefaultColorFunction] := With[{lambdas = Cases[lambda, Interpretation["\[Lambda]", x_], All, Heads -> True]},
 	lambda /. MapThread[x : #1 | ReplacePart[#1, 1 -> _Integer] :> Style[x, Bold, #2] &, {lambdas, colorFunction /@ Range[Length[lambdas]]}]
 ]
 
@@ -445,12 +446,16 @@ LambdaRow[(f : Except[Interpretation["\[Lambda]", _]])[(g : Except[Interpretatio
 LambdaRow[f_[x_], depth_ : 0] := Join[LambdaRow[f, depth], LambdaRow[x, depth]]
 LambdaRow[x_, ___] := {x}
 
-Options[LambdaSmiles] = Join[{"Height" -> 3, "Spacing" -> 1, "StandardForm" -> False, "Arguments" -> False}, Options[Style], Options[Graphics]];
+Options[LambdaSmiles] = Join[
+	{"Height" -> 3, "Spacing" -> 1, "StandardForm" -> False, "Arguments" -> False, ColorFunction -> $DefaultColorFunction},
+	Options[Style], Options[Graphics]
+];
 LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	row = LambdaRow[TagLambda[lambda]],
 	lambdaPos, varPos, argPos, lambdas, vars, args, colors, arrows,
 	height = OptionValue["Height"], spacing = OptionValue["Spacing"],
 	argQ = TrueQ[OptionValue["Arguments"]],
+	colorFunction = OptionValue[ColorFunction],
 	styleOpts = FilterRules[{opts}, Options[Style]]
 },
 	row = FixedPoint[
@@ -477,7 +482,7 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	lambdas = AssociationThread[#[[All, 1, 1]], Thread[First /@ lambdaPos -> #[[All, 2]]]] & @ Extract[row, lambdaPos];
 	args = AssociationThread[#[[All, 1, 1]], Thread[First /@ argPos -> #[[All, 2]]]] & @ Extract[row, argPos];
 	vars = Extract[row, varPos];
-	colors = Association @ MapIndexed[#1[[1, 1]] -> ColorData[109][#2[[1]]] &, Extract[row, lambdaPos]];
+	colors = Association @ MapIndexed[#1[[1, 1]] -> colorFunction[#2[[1]]] &, Extract[row, lambdaPos]];
 	row = row //
 		MapAt[Style["\[Lambda]", Lookup[colors, #[[1, 1]], Black]] &, lambdaPos] //
 		MapAt[Style[#[[If[argQ, 2, 1]]], Lookup[colors, #[[2]], Black]] &, varPos] //

@@ -506,7 +506,7 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 Options[LambdaDiagram] = Join[{"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False}, Options[Graphics]];
 
 LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, thick_ ? BooleanQ, pos_List : {}] := Block[{
-	w, h, lines, dh = Max[depths, -1] + If[thick, 0, 1], dw = If[thick, 2, 1]
+	w, h, lines, dh = Max[depths, -1] + If[extend, 0, 1], dw = If[thick, 2, 1]
 },
 	h = If[extend, 1, 0];
 	Replace[expr, {
@@ -577,7 +577,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	],
 	lambda = TagLambda[UntagLambda[expr]], depths, lines, dots,
 	pointFunction = If[TrueQ[OptionValue["Thick"]],
-		Function[{}],
+		Function[{Red, Disk[#, 1 / 4]}],
 		Function[Point[#]]
 	],
 	lineFunction = If[TrueQ[OptionValue["Thick"]],

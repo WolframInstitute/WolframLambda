@@ -22,6 +22,7 @@ EvalLambda;
 LambdaFreeVariables;
 
 BetaReductions;
+BetaReducePositions;
 BetaReduce;
 BetaReduceList;
 EtaReduce;
@@ -135,12 +136,20 @@ BetaReductions[fun_[arg_]] := Join[#[arg] & /@ BetaReductions[fun], fun[#] & /@ 
 BetaReductions[expr_] := {}
 
 
-BetaReduce[expr_] := expr //. \[FormalLambda][body_][arg_] :> betaSubstitute[body, arg]
-BetaReduce[expr_, n_Integer] := If[ n <= 0, expr,
-	With[{pos = FirstPosition[expr, \[FormalLambda][_][_]]}, If[MissingQ[pos], expr, BetaReduce[ReplaceAt[expr, \[FormalLambda][body_][arg_] :> betaSubstitute[body, arg], pos], n - 1]]]
-]
+Options[BetaReducePositions] = Options[TreePosition]
 
-BetaReduceList[expr_, n_Integer : Infinity] := Most[FixedPointList[BetaReduce[#, 1] &, expr, n]]
+BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
+	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], \[FormalLambda][_][_], All, n, opts] - 1
+
+Options[BetaReduce] = Options[BetaReducePositions]
+
+BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
+ 	FixedPoint[ReplaceAt[#, \[FormalLambda][body_][arg_] :> betaSubstitute[body, arg], BetaReducePositions[#, m, opts]] &, expr, n]
+
+Options[BetaReduceList] = Options[BetaReduce]
+
+BetaReduceList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] :=
+	FixedPointList[BetaReduce[#, 1, m, opts] &, expr, n]
 
 
 (* substitute all variables *)

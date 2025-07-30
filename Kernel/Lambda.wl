@@ -25,6 +25,7 @@ BetaReductions;
 BetaReducePositions;
 BetaReduce;
 BetaReduceList;
+BetaReduceSizes;
 EtaReduce;
 
 LambdaCombinator;
@@ -49,6 +50,8 @@ LambdaDepths;
 ColorizeLambda;
 LambdaSmiles;
 LambdaDiagram;
+
+$LambdaBusyBeavers;
 
 
 Begin["`Private`"];
@@ -151,6 +154,8 @@ Options[BetaReduceList] = Options[BetaReduce]
 BetaReduceList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] :=
 	FixedPointList[BetaReduce[#, 1, m, opts] &, expr, n]
 
+BetaReduceSizes[expr_, n : _Integer | Infinity : Infinity, opts___] :=
+	NestWhile[Apply[{BetaReduce[#1, 1, 1, opts],  Append[#2, LeafCount[#1]]} &], {expr, {}}, #1[[1]] =!= #2[[1]] &, 2, n]
 
 (* substitute all variables *)
 LambdaSubstitute[expr_, vars_Association : <||>, offset_Integer : 0, depth_Integer : 0, subDepth_Integer : 0] :=
@@ -686,6 +691,14 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		]
 	]
 ]
+
+
+$LambdaBusyBeavers := $LambdaBusyBeavers = ParseLambda[StringReplace[#, "\\" -> "\[Lambda]"], "Indices"] & /@ 
+ 	Cases[
+  		Import["https://wiki.bbchallenge.org/wiki/Busy_Beaver_for_lambda_calculus", "XMLObject"],
+  		XMLElement["table", {"class" -> "wikitable"}, table_] :> Splice @ Most @ Cases[table, XMLElement["code", {}, {code_}] :> code, All],
+  		All
+  	]
 
 
 (* ::Section::Closed:: *)

@@ -70,28 +70,45 @@ EnumerateLambdas[maxDepth_Integer : 2, maxLength_Integer : 2, depth_Integer : 1]
 		Groupings[Catenate[Tuples[Join[Range[depth], EnumerateLambdas[maxDepth, maxLength, depth + 1]], #] & /@ Range[maxLength]], {Construct -> 2}]
 	]
 
-enumerateAffineLambdas[n_Integer, counts_Association : <||>, depth_Integer : 1] := With[{tag = Unique[]},
+
+enumerateLambdas[linearQ : _ ? BooleanQ : True, n_Integer, vars_List : {}, depth_Integer : 1, partsQ : _ ? BooleanQ : True] :=
 	If[ n == 0,
-		Catenate[Groupings[Tuples[#], {Construct -> 2}] & /@ Catenate[Permutations /@ Subsets[KeyValueMap[Table, counts]]]],
+		Groupings[Permutations[vars], {Construct -> 2}],
 		Join[
-			Interpretation["\[Lambda]", tag] /@ EnumerateAffineLambdas[n - 1, Append[counts, Interpretation[depth, tag] -> 1], depth + 1],
-			Catenate @ Map[# /@ EnumerateAffineLambdas[n, MapAt[# - 1 &, counts, Key[#]], depth] &, Keys @ Select[counts, Positive]]
+			With[{tag = Unique[]}, {arg = Interpretation[1, tag]},
+				Interpretation["\[Lambda]", tag] /@ Catenate[
+					enumerateLambdas[
+						linearQ,
+						n - 1,
+						Join[
+							Replace[vars, Interpretation[d_, t_] :> Interpretation[Evaluate[d + 1], t], 1],
+							#
+						],
+						depth + 1
+					] & /@ If[linearQ, {{arg}}, {{arg}, {}}]
+				]
+			]
+			,
+			Catenate @ Map[# /@ enumerateLambdas[linearQ, n, DeleteElements[vars, 1 -> {#}], depth] &, vars]
+			,
+			If[	partsQ && n > 1, 
+				Flatten[
+					Table[
+						Fold[Construct] /@ Tuples[MapThread[enumerateLambdas[linearQ, ##, depth, False] &, {partition, subVars}]],
+						{partition, IntegerPartitions[n, {2, n}]},
+						{subVars, Catenate[Permutations[PadRight[#, Length[partition], {{}}]] & /@
+							ResourceFunction["KSetPartitions"][vars, Min[Length[vars], Length[partition]]]]}
+					],
+					2
+				],
+				{}
+			]
 		]
 	]
-]
 
-enumerateLinearLambdas[n_Integer, counts_Association : <||>, depth_Integer : 1] := With[{tag = Unique[]},
-	If[ n == 0,
-		Groupings[Permutations[Catenate[KeyValueMap[Table, counts]]], {Construct -> 2}],
-		Join[
-			Interpretation["\[Lambda]", tag] /@ EnumerateLinearLambdas[n - 1, Append[counts, Interpretation[depth, tag] -> 1], depth + 1],
-			Catenate @ Map[# /@ EnumerateLinearLambdas[n, MapAt[# - 1 &, counts, Key[#]], depth] &, Keys @ Select[counts, Positive]]
-		]
-	]
-]
+EnumerateAffineLambdas[n_Integer ? Positive] := UntagLambda /@ enumerateLambdas[False, n]
 
-EnumerateAffineLambdas[args___] := UntagLambda /@ enumerateAffineLambdas[args]
-EnumerateLinearLambdas[args___] := UntagLambda /@ enumerateLinearLambdas[args]
+EnumerateLinearLambdas[n_Integer ? Positive] := UntagLambda /@ enumerateLambdas[True, n]
 
 
 AffineLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] <= 1 &]
@@ -616,7 +633,7 @@ LambdaDepths[expr_, depth_Integer : 0] := Replace[expr, {
 	f_[arg_] :> (LambdaDepths[f, depth]; LambdaDepths[arg, depth])
 }]
 
-LambdaPositions[expr_] := Block[{lambda = TagLambda[UntagLambda[expr]], lambdaPos, argPos, tags, argTags},
+LambdaPositions[expr_] := Block[{lambda = TagLambda[UntagLambda[expr], "Unique"], lambdaPos, argPos, tags, argTags},
 	lambdaPos = Position[lambda, Interpretation["\[Lambda]", _], Heads -> True];
 	argPos = Position[lambda, Interpretation[_Integer, tag_], Heads -> True];
 	tags = Extract[lambda, Append[2] /@ lambdaPos];

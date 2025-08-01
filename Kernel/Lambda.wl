@@ -16,6 +16,8 @@ RandomSizeLambda;
 EnumerateLambdas;
 EnumerateAffineLambdas;
 EnumerateLinearLambdas;
+AffineLambdaQ;
+LinearLambdaQ;
 
 LambdaSubstitute;
 EvalLambda;
@@ -47,6 +49,7 @@ BLCLambda;
 TagLambda;
 UntagLambda;
 LambdaDepths;
+LambdaPositions;
 ColorizeLambda;
 LambdaSmiles;
 LambdaDiagram;
@@ -89,6 +92,12 @@ enumerateLinearLambdas[n_Integer, counts_Association : <||>, depth_Integer : 1] 
 
 EnumerateAffineLambdas[args___] := UntagLambda /@ enumerateAffineLambdas[args]
 EnumerateLinearLambdas[args___] := UntagLambda /@ enumerateLinearLambdas[args]
+
+
+AffineLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] <= 1 &]
+
+LinearLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] == 1 &]
+
 
 randomGrouping[xs_List] := Replace[xs, {{x_} :> x, {x_, y_} :> x[y], {x_, y_, z__} :> If[RandomReal[] < .5, x[randomGrouping[{y, z}]], x[y][randomGrouping[{z}]]]}]
 
@@ -601,10 +610,20 @@ LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, th
 	{w, lines}
 ]
 
+
 LambdaDepths[expr_, depth_Integer : 0] := Replace[expr, {
 	Interpretation["\[Lambda]", tag_][body_] :> (Sow[tag -> depth]; LambdaDepths[body, depth + 1]),
 	f_[arg_] :> (LambdaDepths[f, depth]; LambdaDepths[arg, depth])
 }]
+
+LambdaPositions[expr_] := Block[{lambda = TagLambda[UntagLambda[expr]], lambdaPos, argPos, tags, argTags},
+	lambdaPos = Position[lambda, Interpretation["\[Lambda]", _], Heads -> True];
+	argPos = Position[lambda, Interpretation[_Integer, tag_], Heads -> True];
+	tags = Extract[lambda, Append[2] /@ lambdaPos];
+	argTags = Extract[lambda, Append[2] /@ argPos];
+	AssociationThread[lambdaPos -> Lookup[GroupBy[Thread[argTags -> argPos], First -> Last], tags, {}]]
+]
+
 
 LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	makeTooltip = Function[{pos, type},

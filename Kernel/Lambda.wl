@@ -348,9 +348,9 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda,
 		]
 		,
 		{
-			{\[FormalL][v_], _} :> Interpreter[v, {}],
-			{Application, pos_} :> Interpreter["@", pos],
-			{_, pos_} :> Interpreter["\[Lambda]", pos]
+			{\[FormalL][v_], _} :> Interpretation[v, {}],
+			{Application, pos_} :> Interpretation["@", pos],
+			{_, pos_} :> Interpretation["\[Lambda]", pos]
 		}
 		,
 		opts,

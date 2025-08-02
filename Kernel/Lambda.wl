@@ -10,7 +10,7 @@ BeginPackage["Wolfram`Lambda`"];
 (* ::Text:: *)
 (*Declare your public symbols here:*)
 
-
+ClosedLambdaQ;
 RandomLambda;
 RandomSizeLambda;
 EnumerateLambdas;
@@ -290,9 +290,11 @@ LambdaFreeVariables[expr_, pos_List : {}, depth_Integer : 0] := Replace[expr, {
 	\[FormalLambda][body_] :> LambdaFreeVariables[body, Append[pos, 1], depth + 1],
 	f_[x_] :> Join[LambdaFreeVariables[f, Append[pos, 0], depth], LambdaFreeVariables[x, Append[pos, 1], depth]],
 	var_Integer :> If[var > depth, {{depth, pos, var}}, {}],
-	_ :> {}
+	x_ :> {{depth, pos, x}}
 }
 ]
+
+ClosedLambdaQ[lambda_] := LambdaFreeVariables[lambda] === {}
 
 
 TagLambda[expr_, lambdas_Association] := With[{

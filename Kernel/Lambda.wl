@@ -34,6 +34,7 @@ LambdaCombinator;
 CombinatorLambda;
 
 LambdaApplication;
+LambdaRightApplication;
 LambdaBrackets;
 LambdaString;
 
@@ -399,6 +400,8 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda,
 
 LambdaApplication[lambda_, ___] := lambda //. (f : Except[\[FormalLambda]])[x_] :> Application[f, x]
 
+LambdaRightApplication[lambda_, sym_ : "@", ___] := OutputForm[lambda //. (f : Except[\[FormalLambda]])[x_] :> Infix[SmallCircle[f, x], sym, 500, Right]]
+
 LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. "\[FormalLambda]" | "\[Application]" -> "\[InvisibleSpace]"]
 
 LambdaString[lambda_, "Variables"] := TagLambda[lambda] //. {
@@ -419,9 +422,11 @@ ResourceFunction["AddCodeCompletion"]["LambdaString"][None, {"Variables", "Indic
 
 LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 	"Application",
-	LambdaApplication[expr],
+	LambdaApplication[expr, args],
+	"RightApplication",
+	LambdaRightApplication[expr, args],
 	"BracketParens",
-	LambdaBrackets[expr],
+	LambdaBrackets[expr, args],
 	"Function",
 	LambdaFunction[expr, args],
 	"Combinator",

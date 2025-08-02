@@ -499,7 +499,7 @@ blcLambda[bits : {___Integer}] :=
 		_ -> {Missing["UnrecognizedBits", bits], {}}
 	}]
 
-BLCLambda[bits : {(0 | 1) ...}] := First[blcLambda[bits]]
+BLCLambda[bits : {(0 | 1) ...}] := With[{lambda = blcLambda[bits]}, If[lambda[[2]] === {}, lambda[[1]], Missing @@ lambda]]
 
 BLCLambda[ba_ByteArray] := BLCLambda[Catenate[Reverse /@ IntegerDigits[Normal[ba], 2, 8]]]
 

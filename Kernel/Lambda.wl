@@ -591,7 +591,12 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 ]
 
 
-Options[LambdaDiagram] = Join[{"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False}, Options[Graphics]];
+Options[LambdaDiagram] = Join[{
+	"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False,
+	ColorFunction -> Function[Switch[#, "Lambda", StandardRed, "LambdaApplication", StandardGreen, _, StandardBlue]]
+},
+	Options[Graphics]
+];
 
 LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, thick_ ? BooleanQ, pos_List : {}] := Block[{
 	w, h, lines, dh = Max[depths, -1] + If[extend, 0, 1], dw = If[thick, 2, 1]
@@ -669,15 +674,13 @@ LambdaPositions[expr_] := Block[{lambda = TagLambda[UntagLambda[expr], "Unique"]
 LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	makeTooltip = Function[{pos, type},
 		type -> MapAt[Framed, {pos}] @ If[StringEndsQ[type, "Application"],
-			MapAt[Style[#, Blue] &, Append[pos, 1]] @* MapAt[Style[#, Red] &, Append[pos, 0]],
+			MapAt[Style[#, StandardBlue] &, Append[pos, 1]] @* MapAt[Style[#, StandardRed] &, Append[pos, 0]],
 			Identity
 		] @ expr
 	],
 	lambda = TagLambda[UntagLambda[expr]], depths, lines, dots,
-	pointFunction = If[TrueQ[OptionValue["Thick"]],
-		Function[{Red, Disk[#, 1 / 4]}],
-		Function[Point[#]]
-	],
+	colorFunction = OptionValue[ColorFunction],
+	pointFunction,
 	lineFunction = If[TrueQ[OptionValue["Thick"]],
 		Function[Rectangle @@ Replace[#1, {
 			(* Horizontal *)
@@ -688,6 +691,10 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		Function[Line[#]]
 	]
 },
+	pointFunction = If[TrueQ[OptionValue["Thick"]],
+		Function[{colorFunction[#2], Disk[#1, 1 / 4]}],
+		Function[{colorFunction[#2], Point[#]}]
+	];
 	depths = Association @ Reap[LambdaDepths[lambda]][[2]];
 	lines = SortBy[
 		LambdaDiagram[lambda, depths, TrueQ[OptionValue["Extend"]], TrueQ[OptionValue["Pad"]], TrueQ[OptionValue["Thick"]]][[2]],
@@ -697,12 +704,12 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		All,
 		{
 			PointSize[Large],
-			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> type_] :> Tooltip[pointFunction[{x, y}], makeTooltip[pos, type]]]
+			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> type_] :> Tooltip[pointFunction[{x, y}, type], makeTooltip[pos, type]]]
 		},
 		True | Automatic,
 		{
 			PointSize[Large],
-			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> Tooltip[pointFunction[{x, y}], makeTooltip[pos, "Lambda"]]]
+			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> Tooltip[pointFunction[{x, y}, type], makeTooltip[pos, "Lambda"]]]
 		},
 		False | None,
 		Nothing

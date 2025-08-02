@@ -41,6 +41,7 @@ LambdaString;
 LambdaFunction;
 FunctionLambda;
 LambdaTree;
+LambdaMinimalTree;
 LambdaGraph;
 LambdaConvert;
 ParseLambda;
@@ -372,6 +373,13 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{colors = <||>},
 		TreeElementShapeFunction -> TreeCases[Application] -> None,
 		TreeElementLabelFunction -> If[TrueQ[OptionValue["ArgumentLabels"]], Automatic, {"NonLeaves" -> Function[If[# === Application, OptionValue["ApplicationLabel"], "\[Lambda]"]]}]
 	]
+]
+
+LambdaMinimalTree[lambda_, opts___] := LambdaTree[lambda,
+	opts,
+	ImageSize -> {Automatic, UpTo[100]}, 
+   	TreeElementShapeFunction -> {TreeCases[Application] -> Function[Inset[Graphics[Disk[{0, 0}], ImageSize -> 4], #1]],  All -> None},
+	TreeElementLabel -> {All -> None}
 ]
 
 LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda, "Colored" -> True, "ArgumentLabels" -> False]},

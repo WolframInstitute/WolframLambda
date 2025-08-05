@@ -563,7 +563,7 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 				If[
 					TrueQ[OptionValue["StandardForm"]],
 					If[ argQ,
-						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Replace[First[xs], {(\[FormalLambda][tag_] -> _) :> Splice[{"Arg"[tag] -> 0, "."}], _ -> Nothing}], Rest[xs], "]"}],
+						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Replace[First[xs], {(\[FormalLambda][tag_] -> _) :> Splice[{"Arg"[tag] -> 0, ","}], _ -> Nothing}], Rest[xs], "]"}],
 						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Rest[xs], "]"}]
 					],
 					If[ argQ,

@@ -23,6 +23,7 @@ LambdaSubstitute;
 EvalLambda;
 LambdaFreeVariables;
 
+BetaSubstitute;
 BetaReductions;
 BetaReducePositions;
 BetaReduce;
@@ -156,6 +157,10 @@ betaSubstitute[var_Integer, arg_, paramIdx_ : 1] := Which[
 ]
 betaSubstitute[expr_, arg_, paramIdx_ : 1] := expr
 
+BetaSubstitute[\[FormalLambda][body_][arg_]] := betaSubstitute[body, arg]
+BetaSubstitute[expr_] := expr
+
+
 (* find all possible beta-reductions by walking the expression tree applying betaSubstitute where possible *)
 BetaReductions[\[FormalLambda][body_][arg_]] := Join[
 	{betaSubstitute[body, arg]},
@@ -175,7 +180,7 @@ BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPat
 Options[BetaReduce] = Options[BetaReducePositions]
 
 BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
- 	FixedPoint[ReplaceAt[#, \[FormalLambda][body_][arg_] :> betaSubstitute[body, arg], BetaReducePositions[#, m, opts]] &, expr, n]
+ 	FixedPoint[MapAt[BetaSubstitute, #, BetaReducePositions[#, m, opts]] &, expr, n]
 
 Options[BetaReduceList] = Options[BetaReduce]
 

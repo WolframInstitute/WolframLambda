@@ -484,12 +484,12 @@ ParseVariableLambda[str_String, vars_Association : <||>] := First @ StringCases[
 	var : WordCharacter .. :> Interpretation[Evaluate[Replace[var, vars]], var]
 }]
 
-ParseIndexLambda[str_String] := First @ StringCases[str, {
+ParseIndexLambda[str_String] := First[StringCases[str, {
 	WhitespaceCharacter ... ~~ "\[Lambda]" ~~ WhitespaceCharacter ... ~~ body__ ~~ WhitespaceCharacter ... :> \[FormalLambda][ParseIndexLambda[body]],
 	f__ ~~ WhitespaceCharacter .. ~~ x__ /; BalancedParenthesesQ[f] && BalancedParenthesesQ[x] :> ParseIndexLambda[f][ParseIndexLambda[x]],
 	WhitespaceCharacter ... ~~ "(" ~~ term__ ? BalancedParenthesesQ ~~ ")" ~~ WhitespaceCharacter ... :> ParseIndexLambda[term],
 	WhitespaceCharacter ... ~~ var : DigitCharacter .. ~~ WhitespaceCharacter ... :> Interpreter["Integer"][var]
-}]
+}], StringTrim[str]]
 
 ParseLambda[str_String, form_String : "Variables"] := Switch[form,
 	"Variables",

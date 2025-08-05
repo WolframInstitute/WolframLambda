@@ -354,7 +354,7 @@ LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[ex
 
 
 FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
-	Verbatim[Function][var_, body_][x_] :> \[FormalLambda][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[x, vars]],
+	Verbatim[Function][var_, body_][x_] :> \[FormalLambda][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
 	Verbatim[Function][var_, body_] :> \[FormalLambda][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
 	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
 	var_Symbol :> Replace[var, vars]

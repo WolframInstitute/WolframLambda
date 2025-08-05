@@ -228,31 +228,33 @@ LambdaSubstitute[expr_, vars_Association : <||>, offset_Integer : 0, depth_Integ
 
 (* TODO: non-recursive version *)
 (* this tries to delay substitution *)
-EvalLambda[expr_, vars_Association : <||>, n : _Integer | Infinity : Infinity, k_Integer : 0, offset_Integer : 0, depth_Integer : 0] := If[ k >= n,
+
+Options[EvalLambda] = {"EvalBody" -> True}
+EvalLambda[expr_, vars_Association : <||>, n : _Integer | Infinity : Infinity, k_Integer : 0, offset_Integer : 0, depth_Integer : 0, opts : OptionsPattern[]] := If[ k >= n,
 	With[{subst = LambdaSubstitute[expr, vars, offset, depth]}, Sow[k]; subst]
 	,
 	Replace[
 		expr,
 		{
 			(* beta reductions uses argument->head order *)
-			(lambda : \[FormalLambda][body_])[arg_] :> With[{evalArg = Reap[EvalLambda[arg, vars, n, k, offset, depth]]},
+			(lambda : \[FormalLambda][body_])[arg_] :> With[{evalArg = Reap[EvalLambda[arg, vars, n, k, offset, depth, opts]]},
 				{l = If[! FreeQ[evalArg, _TerminatedEvaluation], Return[evalArg, With], evalArg[[2, 1, 1]]]},
 				If[ l >= n,
 					With[{subst = LambdaSubstitute[lambda, vars, offset, depth][evalArg[[1]]]}, Sow[If[subst === lambda, l, l + 1]]; subst]
 					,
-					EvalLambda[body, <|1 -> evalArg[[1]], KeyMap[# + 1 &, vars]|>, n, l + 1, -1]
+					EvalLambda[body, <|1 -> evalArg[[1]], KeyMap[# + 1 &, vars]|>, n, l + 1, -1, opts]
 				]
 			],
-			\[FormalLambda][body_] :> \[FormalLambda][EvalLambda[body, KeyMap[# + 1 &, vars], n, k, offset, depth + 1]],
+			If[TrueQ[OptionValue["EvalBody"]], \[FormalLambda][body_] :> \[FormalLambda][EvalLambda[body, KeyMap[# + 1 &, vars], n, k, offset, depth + 1]], Nothing],
 			(* standard head->argument evaluation order *)
-			head_[arg_] :> With[
-				{evalHead = Reap[EvalLambda[head, vars, n, k, offset, depth]]},
-				{evalArg = If[! FreeQ[evalHead, _TerminatedEvaluation], Return[evalHead, With], Reap[EvalLambda[arg, vars, n, evalHead[[2, 1, 1]], offset, depth]]]},
+			(head : Except[\[FormalLambda]])[arg_] :> With[
+				{evalHead = Reap[EvalLambda[head, vars, n, k, offset, depth, opts]]},
+				{evalArg = If[! FreeQ[evalHead, _TerminatedEvaluation], Return[evalHead, With], Reap[EvalLambda[arg, vars, n, evalHead[[2, 1, 1]], offset, depth, opts]]]},
 				{l = If[! FreeQ[evalArg, _TerminatedEvaluation], Return[evalArg, With], evalArg[[2, 1, 1]]]},
 				If[ l >= n || evalHead[[1]][evalArg[[1]]] === head[arg],
 					Sow[l]; evalHead[[1]][evalArg[[1]]]
 					,
-					EvalLambda[evalHead[[1]][evalArg[[1]]], n, l]
+					EvalLambda[evalHead[[1]][evalArg[[1]]], n, l, opts]
 				]
 			]
 			,

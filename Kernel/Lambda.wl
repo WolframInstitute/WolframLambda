@@ -187,14 +187,20 @@ Options[BetaReduceList] = Options[BetaReduce]
 BetaReduceList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] :=
 	FixedPointList[BetaReduce[#, 1, m, opts] &, expr, n]
 
-BetaReduceSizes[expr_, n : _Integer | Infinity : Infinity, f_ : LeafCount, opts___] :=
+Options[BetaReduceSizes] = Join[{"Function" -> LeafCount}, Options[BetaReduce]]
+
+BetaReduceSizes[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := With[{
+	subOpts = FilterRules[{opts}, Options[BetaReduce]],
+	f = OptionValue["Function"]
+},
 	NestWhile[
-		Apply[With[{lambda = BetaReduce[#1, 1, 1, opts]}, {lambda, If[#1 === lambda, #2, Append[#2, f[lambda]]]}] &],
+		Apply[With[{lambda = BetaReduce[#1, 1, 1, subOpts]}, {lambda, If[#1 === lambda, #2, Append[#2, f[lambda]]]}] &],
 		{expr, {f[expr]}},
 		Length[#1[[2]]] =!= Length[#2[[2]]] &,
 		2,
 		n
 	]
+]
 
 (* substitute all variables *)
 LambdaSubstitute[expr_, vars_Association : <||>, offset_Integer : 0, depth_Integer : 0, subDepth_Integer : 0] :=

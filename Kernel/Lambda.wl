@@ -603,10 +603,11 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	]
 ]
 
+{$Red, $Green, $Blue} = If[$VersionNumber >= 14.3, {StandardRed, StandardGreen, StandardBlue}, {Red, Green, Blue}]
 
 Options[LambdaDiagram] = Join[{
 	"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False,
-	ColorFunction -> Function[Switch[#, "Lambda", StandardRed, "LambdaApplication", StandardGreen, _, StandardBlue]]
+	ColorFunction -> Function[Switch[#, "Lambda", $Red, "LambdaApplication", $Green, _, $Blue]]
 },
 	Options[Graphics]
 ];
@@ -687,7 +688,7 @@ LambdaPositions[expr_] := Block[{lambda = TagLambda[UntagLambda[expr], "Unique"]
 LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	makeTooltip = Function[{pos, type},
 		type -> MapAt[Framed, {pos}] @ If[StringEndsQ[type, "Application"],
-			MapAt[Style[#, StandardBlue] &, Append[pos, 1]] @* MapAt[Style[#, StandardRed] &, Append[pos, 0]],
+			MapAt[Style[#, $Blue] &, Append[pos, 1]] @* MapAt[Style[#, $Red] &, Append[pos, 0]],
 			Identity
 		] @ expr
 	],

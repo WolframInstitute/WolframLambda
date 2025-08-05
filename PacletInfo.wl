@@ -7,8 +7,8 @@ PacletObject[
     "Creator" -> "Nik Murzin",
     "License" -> "MIT",
     "PublisherID" -> "Wolfram",
-    "Version" -> "1.0.15",
-    "WolframVersion" -> "13.1+",
+    "Version" -> "1.1.1",
+    "WolframVersion" -> "14.2+",
     "PrimaryContext" -> "Wolfram`Lambda`",
     "DocumentationURL" -> "https://resources.wolframcloud.com/PacletRepository/resources",
     "Extensions" -> {

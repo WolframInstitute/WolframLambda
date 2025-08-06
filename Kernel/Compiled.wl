@@ -4,6 +4,8 @@ BeginPackage["Wolfram`Lambda`Compiled`"]
 BetaReduce
 BetaReduceSizes
 BetaReduceSizesBLC
+$CompiledFunctions
+
 
 Begin["`Private`"]
 
@@ -48,6 +50,45 @@ betaSubstitute[expr_, arg_, paramIdx_] := With[{head = expr[[0]]},
    	]
 ]
 
+betaReduceApplicative[expr_] := If[
+  	Length[expr] == 1
+  	,
+  	With[{head = expr[[0]]},
+   		If[	head === InertExpression[\[FormalLambda]],
+    		With[{bodyReduce = betaReduceApplicative[expr[[1]]]},
+     			If[	bodyReduce[[2]] === InertExpression[True], 
+      				InertExpression[List][head[bodyReduce[[1]]], True], 
+      				InertExpression[List][expr, False]
+				]
+     		]
+			,
+    		If[
+     			head[[0]] === InertExpression[\[FormalLambda]], 
+     			With[{arg = betaReduceApplicative[expr[[1]]]},
+      				InertExpression[List][
+						If[arg[[2]] === InertExpression[True], head[arg[[1]]], betaSubstitute[head[[1]], arg[[1]], 1]],
+						True
+					]
+      			]
+     			,
+     			With[{headReduce = betaReduceApplicative[head]},
+      				If[	headReduce[[2]] === InertExpression[True],
+       					InertExpression[List][headReduce[[1]][expr[[1]]], True],
+       					With[{argReduce = betaReduceApplicative[expr[[1]]]},
+       						If[	argReduce[[2]] === InertExpression[True],
+								InertExpression[List][headReduce[[1]][argReduce[[1]]], True],
+								InertExpression[List][expr, False]
+         					]
+        				]
+       				]
+      			]
+     		]
+    	]
+   	]
+  	,
+  	InertExpression[List][expr, False]
+]
+
 betaReduce[expr_] := If[
   	Length[expr] == 1
   	,
@@ -60,27 +101,21 @@ betaReduce[expr_] := If[
 				]
      		]
 			,
-    		If[
-     			head[[0]] === InertExpression[\[FormalLambda]], 
-     			With[{arg = betaReduce[expr[[1]]]},
-      				InertExpression[List][
-						If[arg[[2]] === InertExpression[True], head[arg[[1]]], betaSubstitute[head[[1]], arg[[1]], 1]],
-						True
-					]
-      			]
-     			,
-     			With[{headReduce = betaReduce[head]},
-      				If[	headReduce[[2]] === InertExpression[True],
-       					InertExpression[List][headReduce[[1]][expr[[1]]], True],
-       					With[{argReduce = betaReduce[expr[[1]]]},
-       						If[	argReduce[[2]] === InertExpression[True],
-								InertExpression[List][headReduce[[1]][argReduce[[1]]], True],
-								InertExpression[List][expr, False]
-         					]
-        				]
-       				]
-      			]
-     		]
+            With[{headReduce = betaReduce[head]},
+                If[	headReduce[[2]] === InertExpression[True],
+                    InertExpression[List][headReduce[[1]][expr[[1]]], True],
+                    With[{argReduce = betaReduce[expr[[1]]]},
+                        If[	argReduce[[2]] === InertExpression[True],
+                            InertExpression[List][headReduce[[1]][argReduce[[1]]], True],
+                            If[
+                                head[[0]] === InertExpression[\[FormalLambda]], 
+                                InertExpression[List][betaSubstitute[head[[1]], expr[[1]], 1], True],
+                                InertExpression[List][expr, False]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
     	]
    	]
   	,
@@ -119,36 +154,37 @@ lambdaBLC[expr_] := Block[{bits, i},
 decl = {
 	FunctionDeclaration[offsetFree, Typed[DownValuesFunction[offsetFree], {"InertExpression", "MachineInteger", "MachineInteger"} -> "InertExpression"]],
    	FunctionDeclaration[betaSubstitute, Typed[DownValuesFunction[betaSubstitute], {"InertExpression", "InertExpression", "MachineInteger"} -> "InertExpression"]],
+   	FunctionDeclaration[betaReduceApplicative, Typed[DownValuesFunction[betaReduceApplicative], {"InertExpression"} -> "InertExpression"]],
    	FunctionDeclaration[betaReduce, Typed[DownValuesFunction[betaReduce], {"InertExpression"} -> "InertExpression"]],
    	FunctionDeclaration[leafCount, Typed[DownValuesFunction[leafCount], {"InertExpression"} -> "MachineInteger"]],
    	FunctionDeclaration[lambdaBLC, Typed[DownValuesFunction[lambdaBLC], {"InertExpression"} -> "ExtensibleVector"::["MachineInteger"]]]
 }
 
-BetaReduce := BetaReduce = FunctionCompile[decl, Function[Typed[expr, "InertExpression"], betaReduce[expr][[1]]]]
-
-betaReduceSizes := betaReduceSizes = FunctionCompile[decl, 
-	Function[
-		{Typed[expr, "InertExpression"], Typed[n, "MachineInteger"], Typed[f, {"InertExpression"} -> "MachineInteger"]},
+$CompiledFunctions := $CompiledFunctions = FunctionCompile[decl, <|
+    "BetaReduce" -> betaReduce,
+    "BetaReduceApplicative" -> betaReduceApplicative,
+    "LeafCount" -> leafCount,
+    "BLCsize" -> Function[Typed[expr, "InertExpression"], Length[lambdaBLC[expr]]],
+    "BetaReduceSizes" -> Function[
+		{Typed[expr, "InertExpression"], Typed[n, "MachineInteger"], Typed[f, {"InertExpression"} -> "MachineInteger"], Typed[reduce, {"InertExpression"} -> "InertExpression"]},
 		Block[{
-			curExpr = expr, k, reduce,
+			curExpr = expr, k, reduced,
 			sizes = CreateDataStructure["ExtensibleVector"]
 		},
 			For[k = 0, k < n, k++,
 				sizes["Append", f[curExpr]];
-				reduce = betaReduce[curExpr];
-				If[ reduce[[2]] === InertExpression[False], Break[]];
-					curExpr = reduce[[1]];
-				];
-				InertExpression[List][curExpr, sizes["Elements"]]
-			]
+				reduced = reduce[curExpr];
+				If[ reduced[[2]] === InertExpression[False], Break[]];
+					curExpr = reduced[[1]];
+			];
+			InertExpression[List][curExpr, sizes["Elements"]]
 		]
-	]
+    ]
+|>]
 
-$CompiledFunctions := $CompiledFunctions = FunctionCompile[decl, <|"LeafCount" -> leafCount, "BLCsize" -> Function[Typed[expr, "InertExpression"], Length[lambdaBLC[expr]]]|>]
+BetaReduceSizes[expr_, n_ : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["LeafCount"], $CompiledFunctions["BetaReduce"]]
 
-BetaReduceSizes[expr_, n_ : 2 ^ ($SystemWordLength - 1) - 1] := betaReduceSizes[expr, n, $CompiledFunctions["LeafCount"]]
-
-BetaReduceSizesBLC[expr_, n_ : 2 ^ ($SystemWordLength - 1) - 1] := betaReduceSizes[expr, n, $CompiledFunctions["BLCsize"]]
+BetaReduceSizesBLC[expr_, n_ : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["BLCsize"], $CompiledFunctions["BetaReduce"]]
 
 
 End[];

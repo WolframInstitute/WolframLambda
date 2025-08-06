@@ -184,22 +184,24 @@ BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 
 
 Options[BetaReduceList] = Options[BetaReduce]
 
-BetaReduceList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] :=
+BetaReduceList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] :=
 	FixedPointList[BetaReduce[#, 1, m, opts] &, expr, n]
 
-Options[BetaReduceSizes] = Join[{"Function" -> LeafCount}, Options[BetaReduce]]
+Options[BetaReduceSizes] = Join[{"Function" -> LeafCount, "FixedPoint" -> True}, Options[BetaReduce]]
 
-BetaReduceSizes[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := With[{
+BetaReduceSizes[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{
 	subOpts = FilterRules[{opts}, Options[BetaReduce]],
-	f = OptionValue["Function"]
+	f = OptionValue["Function"],
+	fixPointQ = TrueQ[OptionValue["FixedPoint"]],
+	sizes = {}, k, lambda = expr
 },
-	NestWhile[
-		Apply[With[{lambda = BetaReduce[#1, 1, 1, subOpts]}, {lambda, If[#1 === lambda, #2, Append[#2, f[lambda]]]}] &],
-		{expr, {f[expr]}},
-		Length[#1[[2]]] =!= Length[#2[[2]]] &,
-		2,
-		n
-	]
+	For[k = 0, k < n, k++,
+		AppendTo[sizes, f[lambda]];
+		pos = BetaReducePositions[lambda, 1, subOpts];
+		If[fixPointQ && pos === {}, Break[]];
+		lambda = MapAt[BetaSubstitute, lambda, pos];
+	];
+	{lambda, sizes}
 ]
 
 (* substitute all variables *)
@@ -374,7 +376,7 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{colors = <||>},
 		],
 		TreeElementLabel -> TreeCases[Application] -> OptionValue["ApplicationLabel"],
 		TreeElementShapeFunction -> TreeCases[Application] -> None,
-		TreeElementLabelFunction -> If[TrueQ[OptionValue["ArgumentLabels"]], Automatic, {"NonLeaves" -> Function[If[# === Application, OptionValue["ApplicationLabel"], "\[Lambda]"]]}]
+		TreeElementLabelFunction -> If[TrueQ[OptionValue["ArgumentLabels"]], Automatic, {"NonLeaves" -> Function[If[# === Application, OptionValue["ApplicationLabel"], Subscript["\[Lambda]", #]]]}]
 	]
 ]
 

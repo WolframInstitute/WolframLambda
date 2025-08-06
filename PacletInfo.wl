@@ -15,7 +15,7 @@ PacletObject[
       {
         "Kernel",
         "Root" -> "Kernel",
-        "Context" -> {"Wolfram`Lambda`"},
+        "Context" -> {"Wolfram`Lambda`", "Wolfram`Lambda`Compiled`"},
         "Symbols" -> {
           "Wolfram`Lambda`EnumerateLambdas",
           "Wolfram`Lambda`RandomLambda",

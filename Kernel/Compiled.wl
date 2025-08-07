@@ -1,6 +1,8 @@
 
 BeginPackage["Wolfram`Lambda`Compiled`"]
 
+BetaReduceCompiled
+BetaReduceListCompiled
 BetaReduceSizesCompiled
 BetaReduceSizesBLCCompiled
 $CompiledFunctions
@@ -194,35 +196,42 @@ decl = {
    	FunctionDeclaration[lambdaBLC, Typed[DownValuesFunction[lambdaBLC], {"InertExpression"} -> "ExtensibleVector"::["MachineInteger"]]]
 }
 
-$CompiledFunctions := $CompiledFunctions = FunctionCompile[decl, <|
-    "BetaReduce" -> betaReduce,
-    "BetaReduceApplicative" -> betaReduceApplicative,
-    "BetaReduceInner" -> betaReduceInner,
-    "LeafCount" -> leafCount,
-    "BLCsize" -> Function[Typed[expr, "InertExpression"], Length[lambdaBLC[expr]]],
-    "BetaReduceSizes" -> Function[
-		{Typed[expr, "InertExpression"], Typed[n, "InertExpression"], Typed[f, {"InertExpression"} -> "MachineInteger"], Typed[reduce, {"InertExpression"} -> "InertExpression"]},
-		Block[{
-			sizes = CreateDataStructure["ExtensibleVector"],
-            fixPointQ = Head[n] === InertExpression[UpTo],
-            curExpr = expr, reduced,
-            limit, k
-		},
-            limit = Cast[If[fixPointQ, n[[1]], n], "MachineInteger"];
-			For[k = 0, k < limit, k++,
-				sizes["Append", f[curExpr]];
-				reduced = reduce[curExpr];
-				If[ fixPointQ && reduced[[2]] === InertExpression[False], Break[]];
-                curExpr = reduced[[1]];
-			];
-			InertExpression[List][curExpr, sizes["Elements"]]
-		]
-    ]
-|>, TargetSystem -> All]
+$CompiledFunctions := $CompiledFunctions = Enclose[
+    ConfirmBy[Once[CloudGet["https://www.wolframcloud.com/obj/nikm/CompiledLambdaFunctions"]], AssociationQ],
+    FunctionCompile[decl, <|
+        "BetaReduce" -> betaReduce,
+        "BetaReduceApplicative" -> betaReduceApplicative,
+        "BetaReduceInner" -> betaReduceInner,
+        "LeafCount" -> leafCount,
+        "BLCsize" -> Function[Typed[expr, "InertExpression"], Length[lambdaBLC[expr]]],
+        "BetaReduceSizes" -> Function[
+            {Typed[expr, "InertExpression"], Typed[n, "InertExpression"], Typed[f, {"InertExpression"} -> "MachineInteger"], Typed[reduce, {"InertExpression"} -> "InertExpression"]},
+            Block[{
+                sizes = CreateDataStructure["ExtensibleVector"],
+                fixPointQ = Head[n] === InertExpression[UpTo],
+                curExpr = expr, reduced,
+                limit, k
+            },
+                limit = Cast[If[fixPointQ, n[[1]], n], "MachineInteger"];
+                For[k = 0, k < limit, k++,
+                    sizes["Append", f[curExpr]];
+                    reduced = reduce[curExpr];
+                    If[ fixPointQ && reduced[[2]] === InertExpression[False], Break[]];
+                    curExpr = reduced[[1]];
+                ];
+                InertExpression[List][curExpr, sizes["Elements"]]
+            ]
+        ]
+    |>, TargetSystem -> All] &
+]
 
-BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["LeafCount"], $CompiledFunctions["BetaReduceInner"]]
+BetaReduceCompiled[expr_, n : _Integer : 1] := Nest[$CompiledFunctions["BetaReduce"][#][[1]] &, expr, n]
 
-BetaReduceSizesBLCCompiled[expr_, n : _Integer | UpTo[_Integer] : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["BLCsize"], $CompiledFunctions["BetaReduceInner"]]
+BetaReduceListCompiled[expr_, n : _Integer | Infinity : Infinity] := NestWhileList[$CompiledFunctions["BetaReduce"][#[[1]]] &, {expr, True}, #[[2]] &, 1, n][[All, 1]]
+
+BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["LeafCount"], $CompiledFunctions["BetaReduce"]]
+
+BetaReduceSizesBLCCompiled[expr_, n : _Integer | UpTo[_Integer] : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["BLCsize"], $CompiledFunctions["BetaReduce"]]
 
 
 End[];

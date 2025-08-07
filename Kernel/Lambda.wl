@@ -172,12 +172,34 @@ BetaReductions[fun_[arg_]] := Join[#[arg] & /@ BetaReductions[fun], fun[#] & /@ 
 BetaReductions[expr_] := {}
 
 
+OuterPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] := Block[{k = n, curPos, curPositions, positions},
+	If[ k < 1, Return[{}]];
+	If[ MatchQ[Unevaluated[expr], patt],
+		positions = {pos};
+		k--
+		,
+		positions = {}
+	];
+	If[ k > 0 && ! AtomQ[Unevaluated[expr]],
+		Do[
+			curPos = Append[pos, i];
+			curPositions = With[{subExpr = Extract[Unevaluated[expr], i, Unevaluated]}, OuterPosition[subExpr, patt, k, curPos]];
+			positions = Join[positions, curPositions];
+			k -= Length[curPositions];
+			If[k < 1, Break[]];
+			,
+			{i, Range[0, Length[Unevaluated[expr]]]}
+		]
+	];
+	positions
+]
+
 Options[BetaReducePositions] = Options[TreePosition]
 
-BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := Position[expr, \[FormalLambda][_][_], All, n, Heads -> True]
+BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := OuterPosition[expr, \[FormalLambda][_][_], n]
 
 BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
-	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], \[FormalLambda][_][_], All, n, opts] - 1
+	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], \[FormalLambda][_][_], All, n, opts, TreeTraversalOrder -> "DepthFirst"] - 1
 
 Options[BetaReduce] = Options[BetaReducePositions]
 

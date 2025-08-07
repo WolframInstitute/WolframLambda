@@ -16,6 +16,7 @@ RandomSizeLambda;
 EnumerateLambdas;
 EnumerateAffineLambdas;
 EnumerateLinearLambdas;
+EnumerateSizeLambdas;
 AffineLambdaQ;
 LinearLambdaQ;
 
@@ -112,6 +113,16 @@ enumerateLambdas[linearQ : _ ? BooleanQ : True, n_Integer, vars_List : {}, depth
 EnumerateAffineLambdas[n_Integer ? Positive] := UntagLambda /@ enumerateLambdas[False, n]
 
 EnumerateLinearLambdas[n_Integer ? Positive] := UntagLambda /@ enumerateLambdas[True, n]
+
+
+lambdaEnumerate[0, depth_ : 0] := Range[depth]
+lambdaEnumerate[0[arg_], depth_ : 0] := Join[
+	\[FormalLambda] /@ lambdaEnumerate[arg, depth + 1],
+	Catenate @ Outer[Construct, Range[depth], lambdaEnumerate[arg, depth], 1]
+]
+lambdaEnumerate[head_[arg_], depth_ : 0] := Catenate @ Outer[Construct, lambdaEnumerate[head, depth], lambdaEnumerate[arg, depth], 1]
+
+EnumerateSizeLambdas[size_Integer] := Catenate[lambdaEnumerate /@ Groupings[ConstantArray[0, size], {Construct -> 2}]]
 
 
 AffineLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] <= 1 &]

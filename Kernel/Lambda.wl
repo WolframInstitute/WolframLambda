@@ -10,15 +10,17 @@ BeginPackage["Wolfram`Lambda`"];
 (* ::Text:: *)
 (*Declare your public symbols here:*)
 
+$Lambda;
 ClosedLambdaQ;
 RandomLambda;
 RandomSizeLambda;
 EnumerateLambdas;
 EnumerateAffineLambdas;
 EnumerateLinearLambdas;
-EnumerateSizeLambdas;
 AffineLambdaQ;
 LinearLambdaQ;
+EnumerateSizeLambdas;
+LambdaSize;
 
 LambdaSubstitute;
 EvalLambda;
@@ -37,6 +39,7 @@ CombinatorLambda;
 
 LambdaApplication;
 LambdaRightApplication;
+LambdaVariableForm;
 LambdaBrackets;
 LambdaString;
 
@@ -66,39 +69,42 @@ Begin["`Private`"];
 
 (* ::Section:: *)
 (*Definitions*)
+If[! ValueQ[$Lambda],
+	$Lambda = \[FormalLambda]
+]
 
 
 EnumerateLambdas[maxDepth_Integer : 2, maxLength_Integer : 2, depth_Integer : 1] :=
-	\[FormalLambda] /@ If[ depth == maxDepth,
+	$Lambda /@ If[ depth == maxDepth,
 		Groupings[Catenate[Tuples[Range[maxDepth], #] & /@ Range[maxLength]], {Construct -> 2}],
 		Groupings[Catenate[Tuples[Join[Range[depth], EnumerateLambdas[maxDepth, maxLength, depth + 1]], #] & /@ Range[maxLength]], {Construct -> 2}]
 	]
 
 
-enumerateLambdas[linearQ : _ ? BooleanQ : True, n_Integer, vars_List : {}, depth_Integer : 1, partsQ : _ ? BooleanQ : True] :=
+enumerateLambdas[limit : _Integer | UpTo[_Integer] : 1, n_Integer, vars_List : {}, depth_Integer : 1, partsQ : _ ? BooleanQ : True] :=
 	If[ n == 0,
 		Groupings[Permutations[vars], {Construct -> 2}],
 		Join[
 			With[{tag = Unique[]}, {arg = Interpretation[1, tag]},
 				Interpretation["\[Lambda]", tag] /@ Catenate[
 					enumerateLambdas[
-						linearQ,
+						limit,
 						n - 1,
 						Join[
 							Replace[vars, Interpretation[d_, t_] :> Interpretation[Evaluate[d + 1], t], 1],
 							#
 						],
 						depth + 1
-					] & /@ If[linearQ, {{arg}}, {{arg}, {}}]
+					] & /@ Replace[limit, {UpTo[x_Integer] :> (ConstantArray[arg, #] & /@ Range[0, x]), x_Integer :> {ConstantArray[arg, x]}}]
 				]
 			]
 			,
-			Catenate @ Map[# /@ enumerateLambdas[linearQ, n, DeleteElements[vars, 1 -> {#}], depth] &, vars]
+			Catenate @ Map[# /@ enumerateLambdas[limit, n, DeleteElements[vars, 1 -> {#}], depth] &, vars]
 			,
 			If[	partsQ && n > 1, 
 				Flatten[
 					Table[
-						Fold[Construct] /@ Tuples[MapThread[enumerateLambdas[linearQ, ##, depth, False] &, {partition, subVars}]],
+						Catenate[Groupings[#, Construct -> 2] & /@ Tuples[MapThread[enumerateLambdas[limit, ##, depth, False] &, {partition, subVars}]]],
 						{partition, IntegerPartitions[n, {2, n}]},
 						{subVars, Catenate[Permutations[PadRight[#, Length[partition], {{}}]] & /@
 							ResourceFunction["KSetPartitions"][vars, Min[Length[vars], Length[partition]]]]}
@@ -110,39 +116,70 @@ enumerateLambdas[linearQ : _ ? BooleanQ : True, n_Integer, vars_List : {}, depth
 		]
 	]
 
-EnumerateAffineLambdas[n_Integer ? Positive] := UntagLambda /@ enumerateLambdas[False, n]
+EnumerateAffineLambdas[n_Integer ? Positive, limit_Integer : 1] := UntagLambda /@ enumerateLambdas[UpTo[limit], n]
 
-EnumerateLinearLambdas[n_Integer ? Positive] := UntagLambda /@ enumerateLambdas[True, n]
-
-
-lambdaEnumerate[0, depth_ : 0] := Range[depth]
-lambdaEnumerate[0[arg_], depth_ : 0] := Join[
-	\[FormalLambda] /@ lambdaEnumerate[arg, depth + 1],
-	Catenate @ Outer[Construct, Range[depth], lambdaEnumerate[arg, depth], 1]
-]
-lambdaEnumerate[head_[arg_], depth_ : 0] := Catenate @ Outer[Construct, lambdaEnumerate[head, depth], lambdaEnumerate[arg, depth], 1]
-
-EnumerateSizeLambdas[size_Integer] := Catenate[lambdaEnumerate /@ Groupings[ConstantArray[0, size], {Construct -> 2}]]
-
+EnumerateLinearLambdas[n_Integer ? Positive, limit_Integer : 1] := UntagLambda /@ enumerateLambdas[limit, n]
 
 AffineLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] <= 1 &]
 
 LinearLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] == 1 &]
 
 
+EnumerateSizeLambdas[
+	size_Integer,
+	lambdaSize : _Integer ? Positive : 1,
+	appSize_Integer : 0,
+	varSize_Integer : 0,
+	depth_Integer : 1,
+	partsQ : _ ? BooleanQ : True
+] := Join[
+	$Lambda /@ Catenate @ Map[m |->
+		Catenate @ Map[
+			Catenate[Groupings[#, Construct -> 2] & /@ Tuples @
+				Map[k |->
+					Join[
+						EnumerateSizeLambdas[k, lambdaSize, appSize, varSize, depth + 1, False],
+						If[	varSize > 0,
+							If[k > 1, With[{i = (k - 1) / varSize}, If[IntegerQ[i] && i <= depth, {i}, {}]], {}],
+							If[k == 1, Range[depth], {}]
+						]
+					],
+					#
+				]
+			] &,
+			Catenate[Permutations /@ IntegerPartitions[size - lambdaSize - (m - 1) * appSize, {m}]]
+		],
+		Range[size - lambdaSize]
+	]
+	,
+	If[	partsQ,
+		Catenate @ Map[
+			Catenate[Groupings[#, Construct -> 2] & /@ Tuples @ Map[EnumerateSizeLambdas[#, lambdaSize, appSize, varSize, depth] & , #]] &,
+			Catenate[Permutations /@ IntegerPartitions[size - appSize, {2}, Range[lambdaSize + 1, size - appSize - lambdaSize - 1]]]
+		],
+		{}
+	]
+]
+
+
+LambdaSize[expr_, lambdaSize : _Integer ? Positive : 1, appSize_Integer : 0, varSize_Integer : 0] := With[{lambda = UntagLambda[expr]},
+	Total[Cases[lambda, #, All, Heads -> True] & /@ {$Lambda[_] -> lambdaSize, Except[$Lambda][_] -> appSize, x_Integer :> varSize * x + 1}, 2]
+]
+
+
 randomGrouping[xs_List] := Replace[xs, {{x_} :> x, {x_, y_} :> x[y], {x_, y_, z__} :> If[RandomReal[] < .5, x[randomGrouping[{y, z}]], x[y][randomGrouping[{z}]]]}]
 
 randomLambda[maxDepth_Integer : 2, maxLength_Integer : 2, depth_Integer : 1] := If[ depth == maxDepth,
-	With[{lambdaQ = RandomReal[] < .5}, If[lambdaQ, \[FormalLambda], Identity] @ randomGrouping @ RandomInteger[{1, If[lambdaQ, depth, depth - 1]}, RandomInteger[{1, maxLength}]]],
-	\[FormalLambda] @ randomGrouping @ Table[randomLambda[maxDepth, maxLength, depth + 1], RandomInteger[{1, maxLength}]]
+	With[{lambdaQ = RandomReal[] < .5}, If[lambdaQ, $Lambda, Identity] @ randomGrouping @ RandomInteger[{1, If[lambdaQ, depth, depth - 1]}, RandomInteger[{1, maxLength}]]],
+	$Lambda @ randomGrouping @ Table[randomLambda[maxDepth, maxLength, depth + 1], RandomInteger[{1, maxLength}]]
 ]
 
 
 RandomLambda[maxDepth_Integer : 2, maxLength_Integer : 2, n : _Integer | Automatic : Automatic] := If[n === Automatic, randomLambda[maxDepth, maxLength], Table[randomLambda[maxDepth, maxLength], n]]
 
 
-randomSizeLambda[head_[arg_], depth_Integer : 0] := With[{headLambda = If[AtomQ[head], RandomChoice[Prepend[\[FormalLambda]] @ Range[depth]], randomSizeLambda[head, depth]]},
-	headLambda[If[AtomQ[arg], If[depth > 0, RandomChoice[Range[depth]], \[FormalLambda][1]], randomSizeLambda[arg, depth + If[headLambda === \[FormalLambda], 1, 0]]]]
+randomSizeLambda[head_[arg_], depth_Integer : 0] := With[{headLambda = If[AtomQ[head], RandomChoice[Prepend[$Lambda] @ Range[depth]], randomSizeLambda[head, depth]]},
+	headLambda[If[AtomQ[arg], If[depth > 0, RandomChoice[Range[depth]], $Lambda[1]], randomSizeLambda[arg, depth + If[headLambda === $Lambda, 1, 0]]]]
 ]
 
 RandomSizeLambda[size_Integer, n : _Integer | Automatic : Automatic] /; size > 1 :=
@@ -153,13 +190,13 @@ RandomSizeLambda[size_Integer, n : _Integer | Automatic : Automatic] /; size > 1
 
 (* offset only the free variables in a lambda term *)
 offsetFree[expr_, 0, ___] := expr
-offsetFree[\[FormalLambda][body_], offset_, depth_ : 0] := \[FormalLambda][offsetFree[body, offset, depth + 1]]
+offsetFree[$Lambda[body_], offset_, depth_ : 0] := $Lambda[offsetFree[body, offset, depth + 1]]
 offsetFree[fun_[x_], offset_, depth_ : 0] := offsetFree[fun, offset, depth][offsetFree[x, offset, depth]]
 offsetFree[var_Integer, offset_, depth_ : 0] := If[var > depth, var + offset, var]
 offsetFree[expr_, offset_, depth_ : 0] := expr
 
 (* perform a substitution of an argument into the body of a lambda, and also decrement the free parameters by one *)
-betaSubstitute[\[FormalLambda][body_], arg_, paramIdx_ : 1] := \[FormalLambda][betaSubstitute[body, arg, paramIdx + 1]]
+betaSubstitute[$Lambda[body_], arg_, paramIdx_ : 1] := $Lambda[betaSubstitute[body, arg, paramIdx + 1]]
 betaSubstitute[fun_[x_], arg_, paramIdx_ : 1] := betaSubstitute[fun, arg, paramIdx][betaSubstitute[x, arg, paramIdx]]
 betaSubstitute[var_Integer, arg_, paramIdx_ : 1] := Which[
 	var < paramIdx, var,
@@ -168,17 +205,17 @@ betaSubstitute[var_Integer, arg_, paramIdx_ : 1] := Which[
 ]
 betaSubstitute[expr_, arg_, paramIdx_ : 1] := expr
 
-BetaSubstitute[\[FormalLambda][body_][arg_]] := betaSubstitute[body, arg]
+BetaSubstitute[$Lambda[body_][arg_]] := betaSubstitute[body, arg]
 BetaSubstitute[expr_] := expr
 
 
 (* find all possible beta-reductions by walking the expression tree applying betaSubstitute where possible *)
-BetaReductions[\[FormalLambda][body_][arg_]] := Join[
+BetaReductions[$Lambda[body_][arg_]] := Join[
 	{betaSubstitute[body, arg]},
-	\[FormalLambda][#][arg] & /@ BetaReductions[body],
-	\[FormalLambda][body][#] & /@ BetaReductions[arg]
+	$Lambda[#][arg] & /@ BetaReductions[body],
+	$Lambda[body][#] & /@ BetaReductions[arg]
 ]
-BetaReductions[\[FormalLambda][body_]] := \[FormalLambda] /@ BetaReductions[body]
+BetaReductions[$Lambda[body_]] := $Lambda /@ BetaReductions[body]
 BetaReductions[fun_[arg_]] := Join[#[arg] & /@ BetaReductions[fun], fun[#] & /@ BetaReductions[arg]]
 BetaReductions[expr_] := {}
 
@@ -207,10 +244,10 @@ OuterPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] :
 
 Options[BetaReducePositions] = Options[TreePosition]
 
-BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := OuterPosition[expr, \[FormalLambda][_][_], n]
+BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := OuterPosition[expr, $Lambda[_][_], n]
 
 BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
-	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], \[FormalLambda][_][_], All, n, opts, TreeTraversalOrder -> "DepthFirst"] - 1
+	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], $Lambda[_][_], All, n, opts, TreeTraversalOrder -> "DepthFirst"] - 1
 
 Options[BetaReduce] = Options[BetaReducePositions]
 
@@ -247,8 +284,8 @@ LambdaSubstitute[expr_, vars_Association : <||>, offset_Integer : 0] :=
 		expr
 		,
 		Replace[expr, {
-			\[FormalLambda][body_] :> \[FormalLambda][LambdaSubstitute[body, vars, offset + 1]],
-			\[FormalLambda][body_][arg_] :> \[FormalLambda][LambdaSubstitute[body, vars, offset + 1]][LambdaSubstitute[arg, vars, offset]],
+			$Lambda[body_] :> $Lambda[LambdaSubstitute[body, vars, offset + 1]],
+			$Lambda[body_][arg_] :> $Lambda[LambdaSubstitute[body, vars, offset + 1]][LambdaSubstitute[arg, vars, offset]],
 			f_[x_] :> LambdaSubstitute[f, vars, offset][LambdaSubstitute[x, vars, offset]],
 			var_Integer :> offsetFree[Lookup[vars, var - offset, var], offset]
 		}]
@@ -266,7 +303,7 @@ If[ k >= n,
 		expr,
 		{
 			(* beta reductions uses argument->head order *)
-			(lambda : \[FormalLambda][body_])[arg_] :> With[{evalArg = Reap[EvalLambda[arg, vars, n, k, opts]]},
+			(lambda : $Lambda[body_])[arg_] :> With[{evalArg = Reap[EvalLambda[arg, vars, n, k, opts]]},
 				{l = If[! FreeQ[evalArg, _TerminatedEvaluation], Return[evalArg, With], evalArg[[2, 1, 1]]]},
 				If[ l >= n,
 					With[{subst = LambdaSubstitute[lambda, vars][evalArg[[1]]]}, Sow[If[subst === lambda, l, l + 1]]; subst]
@@ -274,9 +311,9 @@ If[ k >= n,
 					offsetFree[EvalLambda[body, offsetFree[#, 1] & /@ <|1 -> evalArg[[1]], KeyMap[# + 1 &, vars]|>, n, l + 1, opts], -1]
 				]
 			],
-			If[TrueQ[OptionValue["EvalBody"]], \[FormalLambda][body_] :> \[FormalLambda][EvalLambda[body, offsetFree[#, 1] & /@ KeyMap[# + 1 &, vars], n, k]], Nothing],
+			If[TrueQ[OptionValue["EvalBody"]], $Lambda[body_] :> $Lambda[EvalLambda[body, offsetFree[#, 1] & /@ KeyMap[# + 1 &, vars], n, k]], Nothing],
 			(* standard head->argument evaluation order *)
-			(head : Except[\[FormalLambda]])[arg_] :> With[
+			(head : Except[$Lambda])[arg_] :> With[
 				{evalHead = Reap[EvalLambda[head, vars, n, k, opts]]},
 				{evalArg = If[! FreeQ[evalHead, _TerminatedEvaluation], Return[evalHead, With], Reap[EvalLambda[arg, vars, n, evalHead[[2, 1, 1]], opts]]]},
 				{l = If[! FreeQ[evalArg, _TerminatedEvaluation], Return[evalArg, With], evalArg[[2, 1, 1]]]},
@@ -293,9 +330,9 @@ If[ k >= n,
 ]
 
 
-EtaReduce[expr_] := expr //. \[FormalLambda][(f : Except[_Integer])[1]] :> offsetFree[f, -1]
+EtaReduce[expr_] := expr //. $Lambda[(f : Except[_Integer])[1]] :> offsetFree[f, -1]
 EtaReduce[expr_, n_Integer] := If[ n <= 0, expr,
-	With[{pos = FirstPosition[expr, \[FormalLambda][Except[_Integer][1]]]}, If[MissingQ[pos], expr, EtaReduce[ReplaceAt[expr, \[FormalLambda][f_[1]] :> offsetFree[f, -1], pos], n - 1]]]
+	With[{pos = FirstPosition[expr, $Lambda[Except[_Integer][1]]]}, If[MissingQ[pos], expr, EtaReduce[ReplaceAt[expr, $Lambda[f_[1]] :> offsetFree[f, -1], pos], n - 1]]]
 ]
 
 
@@ -326,17 +363,17 @@ LambdaCombinator[expr_, ruleSpec_String : "SK"] := Block[{T, rules = Characters[
 ]
 
 CombinatorLambda[expr_] := expr //. {
-	CombinatorI -> \[FormalLambda][1],
-	CombinatorK -> \[FormalLambda][\[FormalLambda][2]],
-	CombinatorS -> \[FormalLambda][\[FormalLambda][\[FormalLambda][3[1][2[1]]]]],
-	CombinatorC -> \[FormalLambda][\[FormalLambda][\[FormalLambda][3[1][2]]]],
-	CombinatorB -> \[FormalLambda][\[FormalLambda][\[FormalLambda][3[2[1]]]]]
+	CombinatorI -> $Lambda[1],
+	CombinatorK -> $Lambda[$Lambda[2]],
+	CombinatorS -> $Lambda[$Lambda[$Lambda[3[1][2[1]]]]],
+	CombinatorC -> $Lambda[$Lambda[$Lambda[3[1][2]]]],
+	CombinatorB -> $Lambda[$Lambda[$Lambda[3[2[1]]]]]
 }
 
 
 LambdaFreeVariables[expr_, pos_List : {}, depth_Integer : 0] := Replace[expr, {
-	\[FormalLambda][body_][arg_] :> Join[LambdaFreeVariables[body, Join[pos, {0, 1}], depth + 1], LambdaFreeVariables[arg, Append[pos, 1], depth]],
-	\[FormalLambda][body_] :> LambdaFreeVariables[body, Append[pos, 1], depth + 1],
+	$Lambda[body_][arg_] :> Join[LambdaFreeVariables[body, Join[pos, {0, 1}], depth + 1], LambdaFreeVariables[arg, Append[pos, 1], depth]],
+	$Lambda[body_] :> LambdaFreeVariables[body, Append[pos, 1], depth + 1],
 	f_[x_] :> Join[LambdaFreeVariables[f, Append[pos, 0], depth], LambdaFreeVariables[x, Append[pos, 1], depth]],
 	var_Integer :> If[var > depth, {{depth, pos, var}}, {}],
 	x_ :> {{depth, pos, x}}
@@ -350,12 +387,12 @@ TagLambda[expr_, lambdas_Association] := With[{
 	nextLambdas = KeyMap[# + 1 &] @ lambdas
 },
 	expr /. {
-		\[FormalLambda][body_][y_] :> With[{newLambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]][TagLambda[y, lambdas]]],
-		\[FormalLambda][body_] :> With[{newLambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]]],
+		$Lambda[body_][y_] :> With[{newLambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]][TagLambda[y, lambdas]]],
+		$Lambda[body_] :> With[{newLambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]]],
 		term_Integer :> Interpretation[term, Evaluate @ If[KeyExistsQ[lambdas, term], lambdas[term][[2]], Max[Keys[lambdas]]]]
 	}
 ]
-TagLambda[\[FormalLambda][body_], "Unique"] := With[{lambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, lambda[TagLambda[body, <|1 -> lambda|>]]]
+TagLambda[$Lambda[body_], "Unique"] := With[{lambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, lambda[TagLambda[body, <|1 -> lambda|>]]]
 
 SetAttributes[AlphabetString, Listable]
 AlphabetString[0] = ""
@@ -373,20 +410,20 @@ TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = Ta
 	]
 ]
 
-TagLambda[expr_, form_String : "Alphabet"] := expr /. lambda_\[FormalLambda] :> TagLambda[lambda, form]
+TagLambda[expr_, form_String : "Alphabet"] := expr /. lambda_$Lambda :> TagLambda[lambda, form]
 
 ResourceFunction["AddCodeCompletion"]["TagLambda"][None, {"Alphabet", "Unique"}]
 
 
-UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> \[FormalLambda], Interpretation[x_, _] :> x}
+UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> $Lambda, Interpretation[x_, _] :> x}
 
 
 LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[expr]] //. {Interpretation["\[Lambda]", x_][body_] :> Function[x, body], Interpretation[_Integer, x_] :> x})
 
 
 FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
-	Verbatim[Function][var_, body_][x_] :> \[FormalLambda][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
-	Verbatim[Function][var_, body_] :> \[FormalLambda][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
+	Verbatim[Function][var_, body_][x_] :> $Lambda[FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
+	Verbatim[Function][var_, body_] :> $Lambda[FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
 	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
 	var_Symbol :> Replace[var, vars]
 }]
@@ -456,11 +493,13 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda,
 ]
 
 
-LambdaApplication[lambda_, ___] := lambda //. (f : Except[\[FormalLambda]])[x_] :> Application[f, x]
+LambdaApplication[lambda_, ___] := lambda //. (f : Except[$Lambda])[x_] :> Application[f, x]
 
-LambdaRightApplication[lambda_, sym_ : "@", ___] := OutputForm[lambda //. (f : Except[\[FormalLambda]])[x_] :> Infix[SmallCircle[f, x], sym, 500, Right]]
+LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {(l : Interpretation["\[Lambda]", tag_])[arg_] :> $Lambda[tag, arg], Interpretation[_Integer, tag_]:> tag}
 
-LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. "\[FormalLambda]" | "\[Application]" -> "\[InvisibleSpace]"]
+LambdaRightApplication[lambda_, sym_ : "@", ___] := OutputForm[lambda //. (f : Except[$Lambda])[x_] :> Infix[SmallCircle[f, x], sym, 500, Right]]
+
+LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. "$Lambda" | "\[Application]" -> "\[InvisibleSpace]"]
 
 LambdaString[lambda_, "Variables"] := TagLambda[lambda] //. {
    	Interpretation["\[Lambda]", var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], LambdaString[body, "Variables"]],
@@ -469,7 +508,7 @@ LambdaString[lambda_, "Variables"] := TagLambda[lambda] //. {
 }
 
 LambdaString[lambda_, "Indices"] := UntagLambda[lambda] //. {
-   	\[FormalLambda][body_] :> StringTemplate["(\[Lambda] ``)"][LambdaString[body, "Indices"]],
+   	$Lambda[body_] :> StringTemplate["(\[Lambda] ``)"][LambdaString[body, "Indices"]],
 	f_[x_] :> StringTemplate["(`` ``)"][LambdaString[f, "Indices"], LambdaString[x, "Indices"]]
 }
 
@@ -483,6 +522,8 @@ LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 	LambdaApplication[expr, args],
 	"RightApplication",
 	LambdaRightApplication[expr, args],
+	"VariableForm" | "StandardForm",
+	LambdaVariableForm[expr, args],
 	"BracketParens",
 	LambdaBrackets[expr, args],
 	"Function",
@@ -516,7 +557,7 @@ ParseVariableLambda[str_String, vars_Association : <||>] := First @ StringCases[
 }]
 
 ParseIndexLambda[str_String] := First[StringCases[str, {
-	WhitespaceCharacter ... ~~ "\[Lambda]" ~~ WhitespaceCharacter ... ~~ body__ ~~ WhitespaceCharacter ... :> \[FormalLambda][ParseIndexLambda[body]],
+	WhitespaceCharacter ... ~~ "\[Lambda]" ~~ WhitespaceCharacter ... ~~ body__ ~~ WhitespaceCharacter ... :> $Lambda[ParseIndexLambda[body]],
 	f__ ~~ WhitespaceCharacter .. ~~ x__ /; BalancedParenthesesQ[f] && BalancedParenthesesQ[x] :> ParseIndexLambda[f][ParseIndexLambda[x]],
 	WhitespaceCharacter ... ~~ "(" ~~ term__ ? BalancedParenthesesQ ~~ ")" ~~ WhitespaceCharacter ... :> ParseIndexLambda[term],
 	WhitespaceCharacter ... ~~ var : DigitCharacter .. ~~ WhitespaceCharacter ... :> Interpreter["Integer"][var]
@@ -535,14 +576,14 @@ ResourceFunction["AddCodeCompletion"]["ParseLambda"][None, {"Variables", "Indice
 
 
 LambdaBLC[lambda_, ___] := lambda /. {
-	\[FormalLambda][body_] :> {0, 0, Splice[LambdaBLC[body]]},
+	$Lambda[body_] :> {0, 0, Splice[LambdaBLC[body]]},
 	f_[x_] :> {0, 1, Splice[LambdaBLC[f]], Splice[LambdaBLC[x]]},
 	i_Integer :> Append[ConstantArray[1, i], 0]
 }
 
 blcLambda[bits : {___Integer}] :=
 	Replace[bits, {
-		{0, 0, body___} :> ({\[FormalLambda][#1], #2} & @@ blcLambda[{body}]),
+		{0, 0, body___} :> ({$Lambda[#1], #2} & @@ blcLambda[{body}]),
 		{0, 1, fx___} :> (({f, xs} |-> ({f[#1], #2} & @@ blcLambda[xs])) @@ blcLambda[{fx}]),
 		{var : (1 ..), 0, rest___} :> {Length[{var}], {rest}},
 		{} -> {None, {}},
@@ -571,7 +612,7 @@ ColorizeTaggedLambda[lambda_, colorFunction_ : $DefaultColorFunction] := With[{l
 ColorizeLambda[expr_, args___] := ColorizeTaggedLambda[TagLambda[expr], args]
 
 
-LambdaRow[Interpretation["\[Lambda]", tag_][body_], depth_ : 0] := {{\[FormalLambda][tag] -> depth, Splice[LambdaRow[body, depth + 1]]}}
+LambdaRow[Interpretation["\[Lambda]", tag_][body_], depth_ : 0] := {{$Lambda[tag] -> depth, Splice[LambdaRow[body, depth + 1]]}}
 LambdaRow[Interpretation[i_Integer, tag_], ___] := {i -> tag}
 LambdaRow[(f : Except[Interpretation["\[Lambda]", _]])[(g : Except[Interpretation["\[Lambda]", _]])[x_]], depth_ : 0] := Append[LambdaRow[f, depth], LambdaRow[g[x], depth]]
 LambdaRow[f_[x_], depth_ : 0] := Join[LambdaRow[f, depth], LambdaRow[x, depth]]
@@ -594,11 +635,11 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 				If[
 					TrueQ[OptionValue["StandardForm"]],
 					If[ argQ,
-						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Replace[First[xs], {(\[FormalLambda][tag_] -> _) :> Splice[{"Arg"[tag] -> 0, ","}], _ -> Nothing}], Rest[xs], "]"}],
+						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Replace[First[xs], {($Lambda[tag_] -> _) :> Splice[{"Arg"[tag] -> 0, ","}], _ -> Nothing}], Rest[xs], "]"}],
 						If[Length[xs] == 1, {First[xs]}, {First[xs], "[", Rest[xs], "]"}]
 					],
 					If[ argQ,
-						If[Length[xs] == 1, {"(", First[xs], ")"}, {First[xs], "(", Replace[First[xs], {(\[FormalLambda][tag_] -> _) :> Splice[{"Arg"[tag] -> 0, "."}], _ -> Nothing}], Splice[Rest[xs]], ")"}],
+						If[Length[xs] == 1, {"(", First[xs], ")"}, {First[xs], "(", Replace[First[xs], {($Lambda[tag_] -> _) :> Splice[{"Arg"[tag] -> 0, "."}], _ -> Nothing}], Splice[Rest[xs]], ")"}],
 						{"(", Splice[xs], ")"}
 					]
 				]
@@ -607,7 +648,7 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 		] &,
 		row
 	];
-	lambdaPos = Position[row, _\[FormalLambda] -> _, {1}, Heads -> False];
+	lambdaPos = Position[row, _$Lambda -> _, {1}, Heads -> False];
 	varPos = Position[row, _Integer -> _, {1}, Heads -> False];
 	argPos = Position[row, "Arg"[_] -> _, {1}, Heads -> False];
 	lambdas = AssociationThread[#[[All, 1, 1]], Thread[First /@ lambdaPos -> #[[All, 2]]]] & @ Extract[row, lambdaPos];

@@ -174,6 +174,8 @@ BetaReductions[expr_] := {}
 
 Options[BetaReducePositions] = Options[TreePosition]
 
+BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := Position[expr, \[FormalLambda][_][_], All, n, Heads -> True]
+
 BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
 	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], \[FormalLambda][_][_], All, n, opts] - 1
 
@@ -187,15 +189,17 @@ Options[BetaReduceList] = Options[BetaReduce]
 BetaReduceList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] :=
 	FixedPointList[BetaReduce[#, 1, m, opts] &, expr, n]
 
-Options[BetaReduceSizes] = Join[{"Function" -> LeafCount, "FixedPoint" -> True}, Options[BetaReduce]]
+Options[BetaReduceSizes] = Join[{"Function" -> LeafCount}, Options[BetaReduce]]
 
-BetaReduceSizes[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{
-	subOpts = FilterRules[{opts}, Options[BetaReduce]],
+BetaReduceSizes[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infinity, opts : OptionsPattern[]] := Block[{
+	subOpts = Sequence @@ FilterRules[{opts}, Options[BetaReducePositions]],
 	f = OptionValue["Function"],
-	fixPointQ = TrueQ[OptionValue["FixedPoint"]],
-	sizes = {}, k, lambda = expr
+	limit = Replace[n, _[x_] :> x],
+	fixPointQ = MatchQ[n, _UpTo],
+	lambda = expr,
+	sizes = {}, k
 },
-	For[k = 0, k < n, k++,
+	For[k = 0, k < limit, k++,
 		AppendTo[sizes, f[lambda]];
 		pos = BetaReducePositions[lambda, 1, subOpts];
 		If[fixPointQ && pos === {}, Break[]];

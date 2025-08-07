@@ -1,9 +1,8 @@
 
 BeginPackage["Wolfram`Lambda`Compiled`"]
 
-BetaReduce
-BetaReduceSizes
-BetaReduceSizesBLC
+BetaReduceSizesCompiled
+BetaReduceSizesBLCCompiled
 $CompiledFunctions
 
 
@@ -101,10 +100,44 @@ betaReduce[expr_] := If[
 				]
      		]
 			,
-            With[{headReduce = betaReduce[head]},
+    		If[
+     			head[[0]] === InertExpression[\[FormalLambda]], 
+     			InertExpression[List][betaSubstitute[head[[1]], expr[[1]], 1], True]
+     			,
+     			With[{headReduce = betaReduce[head]},
+      				If[	headReduce[[2]] === InertExpression[True],
+       					InertExpression[List][headReduce[[1]][expr[[1]]], True],
+       					With[{argReduce = betaReduce[expr[[1]]]},
+       						If[	argReduce[[2]] === InertExpression[True],
+								InertExpression[List][headReduce[[1]][argReduce[[1]]], True],
+								InertExpression[List][expr, False]
+         					]
+        				]
+       				]
+      			]
+     		]
+    	]
+   	]
+  	,
+  	InertExpression[List][expr, False]
+]
+
+betaReduceInner[expr_] := If[
+  	Length[expr] == 1
+  	,
+  	With[{head = expr[[0]]},
+   		If[	head === InertExpression[\[FormalLambda]],
+    		With[{bodyReduce = betaReduceInner[expr[[1]]]},
+     			If[	bodyReduce[[2]] === InertExpression[True], 
+      				InertExpression[List][head[bodyReduce[[1]]], True], 
+      				InertExpression[List][expr, False]
+				]
+     		]
+			,
+            With[{headReduce = betaReduceInner[head]},
                 If[	headReduce[[2]] === InertExpression[True],
                     InertExpression[List][headReduce[[1]][expr[[1]]], True],
-                    With[{argReduce = betaReduce[expr[[1]]]},
+                    With[{argReduce = betaReduceInner[expr[[1]]]},
                         If[	argReduce[[2]] === InertExpression[True],
                             InertExpression[List][headReduce[[1]][argReduce[[1]]], True],
                             If[
@@ -155,6 +188,7 @@ decl = {
 	FunctionDeclaration[offsetFree, Typed[DownValuesFunction[offsetFree], {"InertExpression", "MachineInteger", "MachineInteger"} -> "InertExpression"]],
    	FunctionDeclaration[betaSubstitute, Typed[DownValuesFunction[betaSubstitute], {"InertExpression", "InertExpression", "MachineInteger"} -> "InertExpression"]],
    	FunctionDeclaration[betaReduceApplicative, Typed[DownValuesFunction[betaReduceApplicative], {"InertExpression"} -> "InertExpression"]],
+   	FunctionDeclaration[betaReduceInner, Typed[DownValuesFunction[betaReduceInner], {"InertExpression"} -> "InertExpression"]],
    	FunctionDeclaration[betaReduce, Typed[DownValuesFunction[betaReduce], {"InertExpression"} -> "InertExpression"]],
    	FunctionDeclaration[leafCount, Typed[DownValuesFunction[leafCount], {"InertExpression"} -> "MachineInteger"]],
    	FunctionDeclaration[lambdaBLC, Typed[DownValuesFunction[lambdaBLC], {"InertExpression"} -> "ExtensibleVector"::["MachineInteger"]]]
@@ -163,28 +197,32 @@ decl = {
 $CompiledFunctions := $CompiledFunctions = FunctionCompile[decl, <|
     "BetaReduce" -> betaReduce,
     "BetaReduceApplicative" -> betaReduceApplicative,
+    "BetaReduceInner" -> betaReduceInner,
     "LeafCount" -> leafCount,
     "BLCsize" -> Function[Typed[expr, "InertExpression"], Length[lambdaBLC[expr]]],
     "BetaReduceSizes" -> Function[
-		{Typed[expr, "InertExpression"], Typed[n, "MachineInteger"], Typed[f, {"InertExpression"} -> "MachineInteger"], Typed[reduce, {"InertExpression"} -> "InertExpression"]},
+		{Typed[expr, "InertExpression"], Typed[n, "InertExpression"], Typed[f, {"InertExpression"} -> "MachineInteger"], Typed[reduce, {"InertExpression"} -> "InertExpression"]},
 		Block[{
-			curExpr = expr, k, reduced,
-			sizes = CreateDataStructure["ExtensibleVector"]
+			sizes = CreateDataStructure["ExtensibleVector"],
+            fixPointQ = Head[n] === InertExpression[UpTo],
+            curExpr = expr, reduced,
+            limit, k
 		},
-			For[k = 0, k < n, k++,
+            limit = Cast[If[fixPointQ, n[[1]], n], "MachineInteger"];
+			For[k = 0, k < limit, k++,
 				sizes["Append", f[curExpr]];
 				reduced = reduce[curExpr];
-				If[ reduced[[2]] === InertExpression[False], Break[]];
-					curExpr = reduced[[1]];
+				If[ fixPointQ && reduced[[2]] === InertExpression[False], Break[]];
+                curExpr = reduced[[1]];
 			];
 			InertExpression[List][curExpr, sizes["Elements"]]
 		]
     ]
-|>]
+|>, TargetSystem -> All]
 
-BetaReduceSizes[expr_, n_ : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["LeafCount"], $CompiledFunctions["BetaReduce"]]
+BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["LeafCount"], $CompiledFunctions["BetaReduceInner"]]
 
-BetaReduceSizesBLC[expr_, n_ : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["BLCsize"], $CompiledFunctions["BetaReduce"]]
+BetaReduceSizesBLCCompiled[expr_, n : _Integer | UpTo[_Integer] : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["BLCsize"], $CompiledFunctions["BetaReduceInner"]]
 
 
 End[];

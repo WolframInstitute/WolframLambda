@@ -229,9 +229,9 @@ BetaReduceCompiled[expr_, n : _Integer : 1] := Nest[$CompiledFunctions["BetaRedu
 
 BetaReduceListCompiled[expr_, n : _Integer | Infinity : Infinity] := NestWhileList[$CompiledFunctions["BetaReduce"][#[[1]]] &, {expr, True}, #[[2]] &, 1, n][[All, 1]]
 
-BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["LeafCount"], $CompiledFunctions["BetaReduce"]]
+BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : UpTo[2 ^ ($SystemWordLength - 1) - 1]] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["LeafCount"], $CompiledFunctions["BetaReduce"]]
 
-BetaReduceSizesBLCCompiled[expr_, n : _Integer | UpTo[_Integer] : 2 ^ ($SystemWordLength - 1) - 1] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["BLCsize"], $CompiledFunctions["BetaReduce"]]
+BetaReduceSizesBLCCompiled[expr_, n : _Integer | UpTo[_Integer] : UpTo[2 ^ ($SystemWordLength - 1) - 1]] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["BLCsize"], $CompiledFunctions["BetaReduce"]]
 
 
 End[];

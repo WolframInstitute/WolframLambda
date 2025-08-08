@@ -522,7 +522,7 @@ LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {(l : Interpretation["
 
 LambdaRightApplication[lambda_, sym_ : "@", ___] := OutputForm[lambda //. (f : Except[$Lambda])[x_] :> Infix[SmallCircle[f, x], sym, 500, Right]]
 
-LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. "$Lambda" | "\[Application]" -> "\[InvisibleSpace]"]
+LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. ToString[$Lambda] | "\[Application]" -> "\[InvisibleSpace]"]
 
 LambdaString[lambda_, "Variables"] := TagLambda[lambda] //. {
    	Interpretation["\[Lambda]", var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], LambdaString[body, "Variables"]],

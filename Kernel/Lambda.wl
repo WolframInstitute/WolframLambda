@@ -564,7 +564,7 @@ LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 	_,
 	Missing[form]
 ]
-ResourceFunction["AddCodeCompletion"]["LambdaConvert"][None, {"Application", "BracketParens", "Function", "Combinator", "Tree", "Graph", "String", "BLC"}]
+ResourceFunction["AddCodeCompletion"]["LambdaConvert"][None, {"Application", "RightApplication", "VariableForm", "BracketParens", "Function", "Combinator", "Tree", "Graph", "String", "BLC"}]
 
 
 BalancedParenthesesQ[str_] := FixedPoint[StringDelete["()"], StringDelete[str, Except["(" | ")"]]] === ""

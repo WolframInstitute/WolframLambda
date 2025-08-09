@@ -27,8 +27,9 @@ EvalLambda;
 LambdaFreeVariables;
 
 BetaSubstitute;
-BetaReductions;
 BetaReducePositions;
+BetaReductions;
+BetaPositionReductions;
 BetaReduce;
 BetaReduceList;
 BetaReduceSizes;
@@ -232,17 +233,6 @@ BetaSubstitute[$Lambda[body_][arg_]] := betaSubstitute[body, arg]
 BetaSubstitute[expr_] := expr
 
 
-(* find all possible beta-reductions by walking the expression tree applying betaSubstitute where possible *)
-BetaReductions[$Lambda[body_][arg_]] := Join[
-	{betaSubstitute[body, arg]},
-	$Lambda[#][arg] & /@ BetaReductions[body],
-	$Lambda[body][#] & /@ BetaReductions[arg]
-]
-BetaReductions[$Lambda[body_]] := $Lambda /@ BetaReductions[body]
-BetaReductions[fun_[arg_]] := Join[#[arg] & /@ BetaReductions[fun], fun[#] & /@ BetaReductions[arg]]
-BetaReductions[expr_] := {}
-
-
 OuterPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] := Block[{k = n, curPos, curPositions, positions},
 	If[ k < 1, Return[{}]];
 	If[ MatchQ[Unevaluated[expr], patt],
@@ -271,6 +261,16 @@ BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := OuterPosition[
 
 BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
 	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], $Lambda[_][_], All, n, opts, TreeTraversalOrder -> "DepthFirst"] - 1
+
+
+Options[BetaReductions] = Options[BetaPositionReductions] = Options[BetaReducePositions]
+
+BetaReductions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] :=
+	MapAt[BetaSubstitute, expr, {#}] & /@ BetaReducePositions[expr, n, opts]
+
+BetaPositionReductions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
+	AssociationMap[MapAt[BetaSubstitute, expr, {#}] &, BetaReducePositions[expr, n, opts]]
+
 
 Options[BetaReduce] = Options[BetaReducePositions]
 

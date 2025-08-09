@@ -4,7 +4,6 @@ BeginPackage["Wolfram`Lambda`Compiled`"]
 BetaReduceCompiled
 BetaReduceListCompiled
 BetaReduceSizesCompiled
-BetaReduceSizesBLCCompiled
 $CompiledFunctions
 
 
@@ -225,13 +224,21 @@ $CompiledFunctions := $CompiledFunctions = Enclose[
     |>, TargetSystem -> All] &
 ]
 
-BetaReduceCompiled[expr_, n : _Integer : 1] := Nest[$CompiledFunctions["BetaReduce"][#][[1]] &, expr, n]
+$ReduceFunction = "BetaReduce" | "BetaReduceInner" | "BetaReduceApplicative"
+$SizeFunction = "LeafCount" | "BLCsize"
 
-BetaReduceListCompiled[expr_, n : _Integer | Infinity : Infinity] := NestWhileList[$CompiledFunctions["BetaReduce"][#[[1]]] &, {expr, True}, #[[2]] &, 1, n][[All, 1]]
+BetaReduceCompiled[expr_, n : _Integer : Infinity, reduce : $ReduceFunction : "BetaReduce"] :=
+    NestWhile[$CompiledFunctions[reduce][#[[1]]] &, {expr, True}, #[[2]] &, 1, n][[1]]
 
-BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : UpTo[2 ^ ($SystemWordLength - 1) - 1]] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["LeafCount"], $CompiledFunctions["BetaReduce"]]
+BetaReduceListCompiled[expr_, n : _Integer | Infinity : Infinity, reduce : $ReduceFunction : "BetaReduce"] :=
+    NestWhileList[$CompiledFunctions[reduce][#[[1]]] &, {expr, True}, #[[2]] &, 1, n][[All, 1]]
 
-BetaReduceSizesBLCCompiled[expr_, n : _Integer | UpTo[_Integer] : UpTo[2 ^ ($SystemWordLength - 1) - 1]] := $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions["BLCsize"], $CompiledFunctions["BetaReduce"]]
+BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : UpTo[2 ^ ($SystemWordLength - 1) - 1], reduce : $ReduceFunction : "BetaReduce", size : $SizeFuntcion : "LeafCount"] :=
+    $CompiledFunctions["BetaReduceSizes"][expr, n, $CompiledFunctions[size], $CompiledFunctions[reduce]]
+
+ResourceFunction["AddCodeCompletion"]["BetaReduceCompiled"][None, None, List @@ $ReduceFunction]
+ResourceFunction["AddCodeCompletion"]["BetaReduceListCompiled"][None, None, List @@ $ReduceFunction]
+ResourceFunction["AddCodeCompletion"]["BetaReduceSizesCompiled"][None, None, List @@ $ReduceFunction, List @@ $SizeFunction]
 
 
 End[];

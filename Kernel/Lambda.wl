@@ -71,7 +71,8 @@ Begin["`Private`"];
 (* ::Section:: *)
 (*Definitions*)
 If[! ValueQ[$Lambda],
-	$Lambda = \[FormalLambda]
+	$Lambda = \[FormalLambda];
+	$LambdaPattern = $Lambda | Interpretation["\[Lambda]", _]
 ]
 
 
@@ -214,13 +215,19 @@ RandomSizeLambda[size_Integer, n : _Integer | Automatic : Automatic] /; size > 1
 
 (* offset only the free variables in a lambda term *)
 offsetFree[expr_, 0, ___] := expr
-offsetFree[$Lambda[body_], offset_, depth_ : 0] := $Lambda[offsetFree[body, offset, depth + 1]]
+offsetFree[(lambda : $LambdaPattern)[body_], offset_, depth_ : 0] := lambda[offsetFree[body, offset, depth + 1]]
+offsetFree[v : Interpretation[var_Integer, _], offset_, depth_ : 0] := ReplacePart[v, 1 -> offsetFree[var, offset, depth]]
 offsetFree[fun_[x_], offset_, depth_ : 0] := offsetFree[fun, offset, depth][offsetFree[x, offset, depth]]
 offsetFree[var_Integer, offset_, depth_ : 0] := If[var > depth, var + offset, var]
 offsetFree[expr_, offset_, depth_ : 0] := expr
 
 (* perform a substitution of an argument into the body of a lambda, and also decrement the free parameters by one *)
-betaSubstitute[$Lambda[body_], arg_, paramIdx_ : 1] := $Lambda[betaSubstitute[body, arg, paramIdx + 1]]
+betaSubstitute[(lambda : $LambdaPattern)[body_], arg_, paramIdx_ : 1] := lambda[betaSubstitute[body, arg, paramIdx + 1]]
+betaSubstitute[v : Interpretation[var_Integer, _], arg_, paramIdx_ : 1] := Which[
+	var < paramIdx, v,
+	var == paramIdx, offsetFree[arg, paramIdx - 1],
+	var > paramIdx, ReplacePart[v, 1 -> var - 1]
+]
 betaSubstitute[fun_[x_], arg_, paramIdx_ : 1] := betaSubstitute[fun, arg, paramIdx][betaSubstitute[x, arg, paramIdx]]
 betaSubstitute[var_Integer, arg_, paramIdx_ : 1] := Which[
 	var < paramIdx, var,
@@ -229,7 +236,7 @@ betaSubstitute[var_Integer, arg_, paramIdx_ : 1] := Which[
 ]
 betaSubstitute[expr_, arg_, paramIdx_ : 1] := expr
 
-BetaSubstitute[$Lambda[body_][arg_]] := betaSubstitute[body, arg]
+BetaSubstitute[$LambdaPattern[body_][arg_]] := betaSubstitute[body, arg]
 BetaSubstitute[expr_] := expr
 
 
@@ -257,10 +264,10 @@ OuterPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] :
 
 Options[BetaReducePositions] = Options[TreePosition]
 
-BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := OuterPosition[expr, $Lambda[_][_], n]
+BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := OuterPosition[expr, $LambdaPattern[_][_], n]
 
 BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
-	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], $Lambda[_][_], All, n, opts, TreeTraversalOrder -> "DepthFirst"] - 1
+	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], $LambdaPattern[_][_], All, n, opts, TreeTraversalOrder -> "DepthFirst"] - 1
 
 
 Options[BetaReductions] = Options[BetaPositionReductions] = Options[BetaReducePositions]
@@ -307,10 +314,10 @@ LambdaSubstitute[expr_, vars_Association : <||>, offset_Integer : 0] :=
 		expr
 		,
 		Replace[expr, {
-			$Lambda[body_] :> $Lambda[LambdaSubstitute[body, vars, offset + 1]],
-			$Lambda[body_][arg_] :> $Lambda[LambdaSubstitute[body, vars, offset + 1]][LambdaSubstitute[arg, vars, offset]],
-			f_[x_] :> LambdaSubstitute[f, vars, offset][LambdaSubstitute[x, vars, offset]],
-			var_Integer :> offsetFree[Lookup[vars, var - offset, var], offset]
+			(lambda : $LambdaPattern)[body_] :> lambda[LambdaSubstitute[body, vars, offset + 1]],
+			(lambda : $LambdaPattern)[body_][arg_] :> lambda[LambdaSubstitute[body, vars, offset + 1]][LambdaSubstitute[arg, vars, offset]],
+			var_Integer | Interpretation[var_Integer, _] :> offsetFree[Lookup[vars, var - offset, var], offset],
+			f_[x_] :> LambdaSubstitute[f, vars, offset][LambdaSubstitute[x, vars, offset]]
 		}]
 	]
 
@@ -326,7 +333,7 @@ If[ k >= n,
 		expr,
 		{
 			(* beta reductions uses argument->head order *)
-			(lambda : $Lambda[body_])[arg_] :> With[{evalArg = Reap[EvalLambda[arg, vars, n, k, opts]]},
+			(lambda : $LambdaPattern[body_])[arg_] :> With[{evalArg = Reap[EvalLambda[arg, vars, n, k, opts]]},
 				{l = If[! FreeQ[evalArg, _TerminatedEvaluation], Return[evalArg, With], evalArg[[2, 1, 1]]]},
 				If[ l >= n,
 					With[{subst = LambdaSubstitute[lambda, vars][evalArg[[1]]]}, Sow[If[subst === lambda, l, l + 1]]; subst]
@@ -334,9 +341,9 @@ If[ k >= n,
 					offsetFree[EvalLambda[body, offsetFree[#, 1] & /@ <|1 -> evalArg[[1]], KeyMap[# + 1 &, vars]|>, n, l + 1, opts], -1]
 				]
 			],
-			If[TrueQ[OptionValue["EvalBody"]], $Lambda[body_] :> $Lambda[EvalLambda[body, offsetFree[#, 1] & /@ KeyMap[# + 1 &, vars], n, k]], Nothing],
+			If[TrueQ[OptionValue["EvalBody"]], (lambda : $LambdaPattern)[body_] :> lambda[EvalLambda[body, offsetFree[#, 1] & /@ KeyMap[# + 1 &, vars], n, k]], Nothing],
 			(* standard head->argument evaluation order *)
-			(head : Except[$Lambda])[arg_] :> With[
+			(head : Except[$LambdaPattern])[arg_] :> With[
 				{evalHead = Reap[EvalLambda[head, vars, n, k, opts]]},
 				{evalArg = If[! FreeQ[evalHead, _TerminatedEvaluation], Return[evalHead, With], Reap[EvalLambda[arg, vars, n, evalHead[[2, 1, 1]], opts]]]},
 				{l = If[! FreeQ[evalArg, _TerminatedEvaluation], Return[evalArg, With], evalArg[[2, 1, 1]]]},
@@ -395,10 +402,11 @@ CombinatorLambda[expr_] := expr //. {
 
 
 LambdaFreeVariables[expr_, pos_List : {}, depth_Integer : 0] := Replace[expr, {
-	$Lambda[body_][arg_] :> Join[LambdaFreeVariables[body, Join[pos, {0, 1}], depth + 1], LambdaFreeVariables[arg, Append[pos, 1], depth]],
-	$Lambda[body_] :> LambdaFreeVariables[body, Append[pos, 1], depth + 1],
+	$LambdaPattern[body_][arg_] :> Join[LambdaFreeVariables[body, Join[pos, {0, 1}], depth + 1], LambdaFreeVariables[arg, Append[pos, 1], depth]],
+	$LambdaPattern[body_] :> LambdaFreeVariables[body, Append[pos, 1], depth + 1],
 	f_[x_] :> Join[LambdaFreeVariables[f, Append[pos, 0], depth], LambdaFreeVariables[x, Append[pos, 1], depth]],
 	var_Integer :> If[var > depth, {{depth, pos, var}}, {}],
+	v : Interpretation[var_Integer, _] :> If[var > depth, {{depth, pos, v}}, {}],
 	x_ :> {{depth, pos, x}}
 }
 ]
@@ -444,19 +452,26 @@ UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> $Lambda, Interp
 LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[expr]] //. {Interpretation["\[Lambda]", x_][body_] :> Function[x, body], Interpretation[_Integer, x_] :> x})
 
 
-FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
+(* FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 	Verbatim[Function][var_, body_][x_] :> $Lambda[FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
 	Verbatim[Function][var_, body_] :> $Lambda[FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
 	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
 	var_Symbol :> Replace[var, vars]
+}] *)
+
+FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
+	Verbatim[Function][var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
+	Verbatim[Function][var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
+	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
+	var_Symbol :> Interpretation[Evaluate[Replace[var, vars]], var]
 }]
 
 
-Options[LambdaTree] = Join[{"Colored" -> False, "ArgumentLabels" -> True, "ApplicationLabel" -> ""}, Options[Tree]]
+Options[LambdaTree] = Join[{"Colored" -> False, "ArgumentLabels" -> True, "ApplicationLabel" -> None, ColorFunction -> $DefaultColorFunction}, Options[Tree]]
 
 LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{colors = <||>},
 	ExpressionTree[
-		ColorizeLambda[lambda] //. (f : Except[Style[Interpretation["\[Lambda]", _], __]])[x_] :> Application[f, x] //. Style[Interpretation[_, tag_], style__] :>
+		ColorizeLambda[lambda, OptionValue[ColorFunction]] //. (f : Except[Style[Interpretation["\[Lambda]", _], __]])[x_] :> Application[f, x] //. Style[Interpretation[_, tag_], style__] :>
 			With[{node = ToString[Unevaluated[tag]]}, AppendTo[colors, TreeCases[node] -> Directive[style]]; node],
 		"Heads", FilterRules[{opts}, Options[Tree]], Heads -> False, 
 		TreeElementLabelStyle -> If[MatchQ[OptionValue["Colored"], "Labels" | True | Automatic],
@@ -599,7 +614,7 @@ ResourceFunction["AddCodeCompletion"]["ParseLambda"][None, {"Variables", "Indice
 
 
 LambdaBLC[lambda_, ___] := lambda /. {
-	$Lambda[body_] :> {0, 0, Splice[LambdaBLC[body]]},
+	$LambdaPattern[body_] :> {0, 0, Splice[LambdaBLC[body]]},
 	f_[x_] :> {0, 1, Splice[LambdaBLC[f]], Splice[LambdaBLC[x]]},
 	i_Integer :> Append[ConstantArray[1, i], 0]
 }

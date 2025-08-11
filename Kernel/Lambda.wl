@@ -28,6 +28,7 @@ LambdaFreeVariables;
 
 BetaSubstitute;
 BetaReducePositions;
+BetaNormalQ;
 BetaReductions;
 BetaPositionReductions;
 BetaReduce;
@@ -90,45 +91,45 @@ EnumerateLambdas[maxDepth_Integer : 2, maxLength_Integer : 2, depth_Integer : 1,
 	Range[If[partsQ, maxLength, 1]]
 ]
 
-
 enumerateLambdas[limit : _Integer | UpTo[_Integer] : 1, n_Integer, vars_List : {}, depth_Integer : 1, partsQ : _ ? BooleanQ : True] :=
 	If[ n == 0,
-		Groupings[Permutations[vars], {Construct -> 2}],
+		constructGroupings[Permutations[vars]],
 		Join[
-			With[{tag = Unique[]}, {arg = Interpretation[1, tag]},
-				Interpretation["\[Lambda]", tag] /@ Catenate[
-					enumerateLambdas[
-						limit,
-						n - 1,
-						Join[
-							Replace[vars, Interpretation[d_, t_] :> Interpretation[Evaluate[d + 1], t], 1],
-							#
-						],
-						depth + 1
-					] & /@ Replace[limit, {UpTo[x_Integer] :> (ConstantArray[arg, #] & /@ Range[0, x]), x_Integer :> {ConstantArray[arg, x]}}]
-				]
+			$Lambda /@ Catenate[
+				enumerateLambdas[
+					limit,
+					n - 1,
+					Join[
+						vars + 1,
+						#
+					],
+					depth + 1
+				] & /@ Replace[limit, {UpTo[x_Integer] :> (ConstantArray[1, #] & /@ Range[0, x]), x_Integer :> {ConstantArray[1, x]}}]
 			]
 			,
-			Catenate @ Map[# /@ enumerateLambdas[limit, n, DeleteElements[vars, 1 -> {#}], depth] &, vars]
-			,
-			If[	partsQ && n > 1, 
+			Catenate @ Map[
+				subVars |-> Catenate[{#1[#2], #2[#1]} & @@@ Tuples[{enumerateLambdas[limit, n, DeleteElements[vars, 1 -> subVars], depth], constructGroupings @ Permutations[subVars]}]],
+				DeleteDuplicates @ Rest[Subsets[vars]]
+			]
+			,	
+			If[	partsQ && n > 1,
 				Flatten[
 					Table[
-						Catenate[Groupings[#, Construct -> 2] & /@ Tuples[MapThread[enumerateLambdas[limit, ##, depth, False] &, {partition, subVars}]]],
-						{partition, IntegerPartitions[n, {2, n}]},
+						constructGroupings /@ Tuples[MapThread[enumerateLambdas[limit, ##, depth, False] &, {partition, subVars}]],
+						{partition, Catenate[Permutations /@ IntegerPartitions[n, {2, n}]]},
 						{subVars, Catenate[Permutations[PadRight[#, Length[partition], {{}}]] & /@
-							ResourceFunction["KSetPartitions"][vars, Min[Length[vars], Length[partition]]]]}
+							Catenate[ResourceFunction["KSetPartitions"][vars, #] & /@ Range[0, Min[Length[vars], Length[partition]]]]]}
 					],
-					2
+					3
 				],
 				{}
 			]
 		]
 	]
 
-EnumerateAffineLambdas[n_Integer ? Positive, limit_Integer : 1] := UntagLambda /@ enumerateLambdas[UpTo[limit], n]
+EnumerateAffineLambdas[n_Integer ? Positive, limit_Integer : 1] := enumerateLambdas[UpTo[limit], n]
 
-EnumerateLinearLambdas[n_Integer ? Positive, limit_Integer : 1] := UntagLambda /@ enumerateLambdas[limit, n]
+EnumerateLinearLambdas[n_Integer ? Positive, limit_Integer : 1] := enumerateLambdas[limit, n]
 
 AffineLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] <= 1 &]
 
@@ -145,7 +146,7 @@ EnumerateSizeLambdas[
 ] := Join[
 	$Lambda /@ Catenate @ Map[m |->
 		Catenate @ Map[
-			Catenate[Groupings[#, Construct -> 2] & /@ Tuples @
+			Catenate[constructGroupings /@ Tuples @
 				Map[k |->
 					Join[
 						EnumerateSizeLambdas[k, lambdaSize, appSize, varSize, depth + 1, False],
@@ -164,7 +165,7 @@ EnumerateSizeLambdas[
 	,
 	If[	partsQ,
 		Catenate @ Map[
-			Catenate[Groupings[#, Construct -> 2] & /@ Tuples @ Map[EnumerateSizeLambdas[#, lambdaSize, appSize, varSize, depth] & , #]] &,
+			Catenate[constructGroupings /@ Tuples @ Map[EnumerateSizeLambdas[#, lambdaSize, appSize, varSize, depth] & , #]] &,
 			Catenate[Permutations /@ IntegerPartitions[size - appSize, {2}, Range[lambdaSize + 1, size - appSize - lambdaSize - 1]]]
 		],
 		{}
@@ -181,7 +182,7 @@ randomGrouping[xs_List] := Replace[xs, {
 	{x_} :> x,
 	{x_, y_} :> x[y],
 	{x_, y_, z__} :> With[{g = randomGrouping[{y, z}]},
-		MapAt[x, g, {RandomChoice[Cases[Position[g, _, Heads -> True], {0 ...}]]}]
+		MapAt[x, g, {RandomChoice[Cases[Position[g, Except[$LambdaPattern], Heads -> True], {0 ...}]]}]
 	]
 }]
 
@@ -268,6 +269,9 @@ BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := OuterPosition[
 
 BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
 	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], $LambdaPattern[_][_], All, n, opts, TreeTraversalOrder -> "DepthFirst"] - 1
+
+
+BetaNormalQ[expr_] := FreeQ[expr, $LambdaPattern[_][_]]
 
 
 Options[BetaReductions] = Options[BetaPositionReductions] = Options[BetaReducePositions]

@@ -715,59 +715,109 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	]
 ]
 
-{$Red, $Green, $Blue, $Yellow} = If[$VersionNumber >= 14.3, {StandardRed, StandardGreen, StandardBlue, StandardYellow}, {Red, Green, Blue, LightYellow}]
+{$Red, $Green, $Blue, $Yellow, $Gray} = If[$VersionNumber >= 14.3,
+	{StandardRed, StandardGreen, StandardBlue, StandardYellow, StandardGray},
+	{Red, Green, Blue, LightYellow, Gray}
+]
+
+$LambdaDiagramColorRules = {
+	"Lambda" -> $Red,
+	"LambdaApplication" -> $Green,
+	"Application" -> $Blue,
+	"Term" -> $Gray,
+	"Variable" | "FreeVariable" | "Constant" -> $Yellow,
+	_ -> Opacity[1]
+}
 
 Options[LambdaDiagram] = Join[{
-	"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False, "Labeled" -> False, "Colored" -> False,
-	ColorFunction -> Function[Switch[#, "Lambda", $Red, "LambdaApplication", $Green, _, $Blue]]
+	"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False,
+	"Labeled" -> False, "Colored" -> False,
+	"Alternative" -> True,
+	ColorRules -> Automatic
 },
 	Options[Graphics]
 ];
 
-LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, thick_ ? BooleanQ, pos_List : {}] := Block[{
+LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, thick_ ? BooleanQ, alternative_ ? BooleanQ, long : _ ? BooleanQ : True, pos_List : {}] := Block[{
 	w, h, lines, dh = Max[depths, -1] + If[extend, 0, 1], dw = If[thick, 2, 1]
 },
-	h = If[extend, 1, 0];
 	Replace[expr, {
 		Interpretation["\[Lambda]", tag_][body_] :> (
-			{w, lines} = LambdaDiagram[body, depths, extend, pad, thick, Append[pos, 1]];
+			{w, lines} = LambdaDiagram[body, depths, extend, pad, thick, alternative, long, Append[pos, 1]];
+			If[ long &&	! alternative,
+				lines = With[{depth = Lookup[depths, tag]},
+					Replace[
+						lines,
+						Labeled[{x_, {y1_, y2_}}, l : (_ -> "Variable")] /; y1 == - depth :> Labeled[{x, {y1, y2 - 1}}, l],
+						1
+					]
+				]
+			];
 			lines = Join[{Labeled[{{0, w}, - Lookup[depths, tag]}, pos -> "Lambda"]}, lines]
 		),
 		f_[arg_] :> Block[{fw, fLines, argw, argLines, fPos, argPos, fVarx, fVary, argVarx, argVary},
-			{fw, fLines} = LambdaDiagram[f, If[pad, depths, KeyTake[depths, Cases[f, Interpretation[_, tag_] :> tag, All, Heads -> True]]], extend, pad, thick, Append[pos, 0]];
-			{argw, argLines} = LambdaDiagram[arg, If[pad, depths, KeyTake[depths, Cases[arg, Interpretation[_, tag_] :> tag, All, Heads -> True]]], extend, pad, thick, Append[pos, 1]];
+			{fw, fLines} = LambdaDiagram[f, If[pad, depths, KeyTake[depths, Cases[f, Interpretation[_, tag_] :> tag, All, Heads -> True]]], extend, pad, thick, alternative, False, Append[pos, 0]];
+			{argw, argLines} = LambdaDiagram[arg, If[pad, depths, KeyTake[depths, Cases[arg, Interpretation[_, tag_] :> tag, All, Heads -> True]]], extend, pad, thick, alternative, False, Append[pos, 1]];
+			
 			fPos = Position[fLines, Labeled[_, _ -> "LambdaApplication" | "Application"]];
-			If[	! extend || fPos === {},
-				fPos = Append[1] @ FirstPosition[fLines, Labeled[{_, {_, _}}, _]]
-				,
-				fPos = Append[1] @ FirstPosition[fLines, Labeled[{SortBy[Extract[fLines, fPos], {#[[1, 2]], -#[[1, 1, 2]]} &][[1, 1, 1, 2]], {_, _}}, _]]
-			];
-			{fVarx, fVary} = Extract[fLines, fPos];
-			fVary = fVary[[2]];
 			argPos = Position[argLines, Labeled[_, _ -> "LambdaApplication" | "Application"]];
-			If[	! extend || argPos === {},
-				argPos = Append[1] @ FirstPosition[argLines, Labeled[{_, {_, _}}, _]]
+			If[	alternative,
+				If[	! extend || fPos === {},
+					fPos = Append[1] @ FirstPosition[fLines, Labeled[{_, {_, _}}, _]]
+					,
+					fPos = Append[1] @ FirstPosition[fLines, Labeled[{SortBy[Extract[fLines, fPos], {#[[1, 2]], - #[[1, 1, 2]]} &][[1, 1, 1, 2]], {_, _}}, _]]
+				];
+				{fVarx, fVary} = Extract[fLines, fPos];
+				fVary = fVary[[2]];
+				If[	! extend || argPos === {},
+					argPos = Append[1] @ FirstPosition[argLines, Labeled[{_, {_, _}}, _]]
+					,
+					argPos = Append[1] @ FirstPosition[argLines, Labeled[{SortBy[Extract[argLines, argPos], {#[[1, 2]], #[[1, 1, 1]]} &][[1, 1, 1, 1]], {_, _}}, _]]
+				];
+				{argVarx, argVary} = Extract[argLines, argPos];
+				argVary = argVary[[2]]
 				,
-				argPos = Append[1] @ FirstPosition[argLines, Labeled[{SortBy[Extract[argLines, argPos], {#[[1, 2]], #[[1, 1, 1]]} &][[1, 1, 1, 1]], {_, _}}, _]]
+				If[ ! extend || fPos === {},
+					{fVarx, fVary} = FirstCase[fLines, Labeled[{x_, {_, y_}}, _] :> {x, y}]
+					,
+					{fVarx, fVary} = SortBy[Extract[fLines, fPos], {#[[1, 2]], - #[[1, 1, 2]]} &][[1, 1]];
+					fVarx = fVarx[[1]]
+				];
+				If[ ! extend || argPos === {},
+					{argVarx, argVary} = FirstCase[argLines, Labeled[{x_, {_, y_}}, _] :> {x, y}]
+					,
+					{argVarx, argVary} = SortBy[Extract[argLines, argPos], {#[[1, 2]], #[[1, 1, 1]]} &][[1, 1]];
+					argVarx = argVarx[[1]]
+				]
 			];
-			{argVarx, argVary} = Extract[argLines, argPos];
-			h += If[ extend,
-				Min[fVary, argVary[[2]]] - 2,	
-				Max[fVary, argVary[[2]]]
+			h = If[ extend,
+				Min[fVary, argVary] - 1,
+				Max[fVary, argVary]
 			];
-			fLines = ReplacePart[fLines, Join[fPos, {2, 2}] -> h];
-			argLines = ReplacePart[argLines, Join[argPos, {2, 2}] -> h];
+			If[ alternative,
+				fLines = ReplacePart[fLines, Join[fPos, {2, 2}] -> h];
+				argLines = ReplacePart[argLines, Join[argPos, {2, 2}] -> h]
+			];
 			argLines = Replace[argLines, Labeled[line_, label_] :> Labeled[line + {fw + dw, 0}, label], 1];
 			lines = Join[
 				fLines,
-				{Labeled[{{fVarx, fw + argVarx + dw}, h}, pos -> If[MatchQ[f, Interpretation["\[Lambda]", _][_]], "LambdaApplication", "Application"]]},
+				{
+					If[ alternative,
+						Nothing,
+						Splice @ {
+							Labeled[{fVarx, {fVary, h}}, Append[pos, 0] -> "Term"],
+							Labeled[{fw + argVarx + dw, {argVary, h}}, Append[pos, 1] -> "Term"]
+						}
+					],
+					Labeled[{{fVarx, fw + argVarx + dw}, h}, pos -> If[MatchQ[f, Interpretation["\[Lambda]", _][_]], "LambdaApplication", "Application"]]
+				},
 				argLines
 			];
 			w = fw + argw + dw;
 		],
 		Interpretation[var_Integer, depth_Integer] :> (
 			w = 0;
-			lines = {Labeled[{0, {var - depth, depth - 1}}, pos -> "FreeVariable"]}
+			lines = {Labeled[{0, {var - depth, - dh}}, pos -> "FreeVariable"]}
 		),
 		Interpretation[var_Integer, tag_] :> With[{depth = Lookup[depths, tag, -1]},
 			w = 0;
@@ -805,12 +855,13 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		] @ expr
 	],
 	lambda = TagLambda[UntagLambda[expr]], depths, lines, dots,
-	colorFunction = OptionValue[ColorFunction],
-	lineFunction, pointFunction, labelFunction
+	colorRules = Replace[OptionValue[ColorRules], {Automatic -> $LambdaDiagramColorRules, rules : {(_Rule | _RuleDelayed) ...} :> Join[rules, $LambdaDiagramColorRules]}],
+	lineFunction, pointFunction, labelFunction,
+	alternative = TrueQ[OptionValue["Alternative"]]
 },
 	With[{typeColorFunction =
 		If[ TrueQ[OptionValue["Colored"]],
-			Function[Switch[#, "Lambda", $Red, "Application", $Blue, "LambdaApplication", $Green, _, $Yellow]],
+			Replace[colorRules],
 			Function[Nothing]
 		]
 	},
@@ -821,15 +872,15 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 					(* Horizontal *)
 					{{x_, z_}, y_} :> With[{shift = If[#3 === "Lambda", 3 / 4, 1 / 4]}, {{x - shift, y - 1 / 4}, {z + shift, y + 1 / 4}}],
 					(* Vertical *)
-					{x_, {y_, z_}} :> {{x - 1 / 4, y - 1 / 4}, {x + 1 / 4, z}}
+					{x_, {y_, z_}} :> {{x - 1 / 4, y - 1 / 4}, {x + 1 / 4, z - 1 / 4}}
 				}]}
 			],
 			Function[{typeColorFunction[#3], Line[Thread[#1]]}]
 		]
 	];
 	pointFunction = If[TrueQ[OptionValue["Thick"]],
-		Function[{colorFunction[#2], Disk[#1, 1 / 4]}],
-		Function[{colorFunction[#2], Point[#]}]
+		Function[{Replace[#2, colorRules], Disk[#1, 1 / 4]}],
+		Function[{Replace[#2, colorRules], Point[#]}]
 	];
 	labelFunction = If[	TrueQ[OptionValue["Labeled"]],
 		Function[{line, pos, type},
@@ -837,19 +888,20 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 				{{{x1_, x2_}, y_}, "Lambda"} :> {Text["\[Lambda][", {x1 - 1/8, y}], Text["]", {x2 + 1/8, y}]},
 				{{{x1_, x2_}, y_}, "Application"} :> {Text["(", {x1 - 1/8, y}], Text["@", {(x1 + x2)/2, y}], Text[")", {x2 + 1/8, y}]},
 				{{{x1_, x2_}, y_}, "LambdaApplication"} :> {Text["(", {x1 - 1/8, y}], Text["\[Beta]", {(x1 + x2)/2, y}], Text[")", {x2 + 1/8, y}]},
-				{{x_, {y1_, y2_}}, _} :> Text[Extract[expr, pos], {x - 1/8, y1 - 1/2}]
+				{{x_, {y1_, y2}}, "Term"} :> Text[Extract[expr, {pos}][[1]], {x - 1/8, y1 - 1/2}],
+				{{x_, {y1_, y2_}}, _} :> If[! alternative && y1 == y2, Nothing, Text[Extract[expr, {pos}][[1]], If[alternative && y1 == y2, {x, y1 - 1/8}, {x - 1/8, y1 - 1/2}]]]
 			}]
 		],
 		Function[Nothing]
 	];
 	depths = Association @ Reap[LambdaDepths[lambda]][[2]];
-	lines = Replace[
-		SortBy[
-			LambdaDiagram[lambda, depths, TrueQ[OptionValue["Extend"]], TrueQ[OptionValue["Pad"]], TrueQ[OptionValue["Thick"]]][[2]],
-			MatchQ[Labeled[{{_, _}, _}, _ -> "LambdaApplication"]]
-		],
-		Labeled[{x_, {y_, y_}}, l_] :> Labeled[{x, {y, y - 1}}, l],
-		1
+	lines = SortBy[
+		LambdaDiagram[lambda, depths,
+			TrueQ[OptionValue["Extend"]], TrueQ[OptionValue["Pad"]],
+			TrueQ[OptionValue["Thick"]],
+			TrueQ[OptionValue["Alternative"]]
+		][[2]],
+		MatchQ[Labeled[{{_, _}, _}, _ -> "LambdaApplication"]]
 	];
 	dots = Switch[OptionValue["Dots"],
 		All,

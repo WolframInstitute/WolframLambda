@@ -488,7 +488,7 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{colors = <||>},
 			"Labels" | True | Automatic,
 			{All -> White},
 			_,
-			{"Leaves" -> LightYellow, _ -> LightRed}
+			{"Leaves" -> $Green, _ -> $Red}
 		],
 		TreeElementLabel -> TreeCases[Application] -> OptionValue["ApplicationLabel"],
 		TreeElementShapeFunction -> TreeCases[Application] -> None,
@@ -517,14 +517,14 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda,
 		{
 			{\[FormalL][v_], _} :> Interpretation[v, {}],
 			{Application, pos_} :> Interpretation["@", pos],
-			{_, pos_} :> Interpretation["\[Lambda]", pos]
+			{v_, pos_} :> Interpretation[Subscript["\[Lambda]", v], pos]
 		}
 		,
 		opts,
 		(* VertexShapeFunction -> Trees`$TreeVertexShapeFunction, *)
 		VertexShapeFunction -> Function[
 			Trees`$TreeVertexShapeFunction[
-				First[#2],
+				#2,
 				Directive[Trees`$TreeVertexColor, Trees`$TreeVertexFrameStyle],
 				MatchQ[#2, Except[{_, {1, ___}}]]
 			][##]
@@ -715,10 +715,10 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	]
 ]
 
-{$Red, $Green, $Blue} = If[$VersionNumber >= 14.3, {StandardRed, StandardGreen, StandardBlue}, {Red, Green, Blue}]
+{$Red, $Green, $Blue, $Yellow} = If[$VersionNumber >= 14.3, {StandardRed, StandardGreen, StandardBlue, StandardYellow}, {Red, Green, Blue, LightYellow}]
 
 Options[LambdaDiagram] = Join[{
-	"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False,
+	"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False, "Labeled" -> False, "Colored" -> False,
 	ColorFunction -> Function[Switch[#, "Lambda", $Red, "LambdaApplication", $Green, _, $Blue]]
 },
 	Options[Graphics]
@@ -806,25 +806,50 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	],
 	lambda = TagLambda[UntagLambda[expr]], depths, lines, dots,
 	colorFunction = OptionValue[ColorFunction],
-	pointFunction,
-	lineFunction = If[TrueQ[OptionValue["Thick"]],
-		Function[Rectangle @@ Replace[#1, {
-			(* Horizontal *)
-			{{x_, y_}, {z_, y_}} :> With[{shift = If[#2 === "Lambda", 3 / 4, 1 / 4]}, {{x - shift, y - 1 / 4}, {z + shift, y + 1 / 4}}],
-			(* Vertical *)
-			{{x_, y_}, {x_, z_}} :> {{x - 1 / 4, y - 1 / 4}, {x + 1 / 4, z}}
-		}]],
-		Function[Line[#]]
-	]
+	lineFunction, pointFunction, labelFunction
 },
+	With[{typeColorFunction =
+		If[ TrueQ[OptionValue["Colored"]],
+			Function[Switch[#, "Lambda", $Red, "Application", $Blue, "LambdaApplication", $Green, _, $Yellow]],
+			Function[Nothing]
+		]
+	},
+		lineFunction = If[TrueQ[OptionValue["Thick"]],
+			Function[{
+				typeColorFunction[#3],
+				Rectangle @@ Replace[#1, {
+					(* Horizontal *)
+					{{x_, z_}, y_} :> With[{shift = If[#3 === "Lambda", 3 / 4, 1 / 4]}, {{x - shift, y - 1 / 4}, {z + shift, y + 1 / 4}}],
+					(* Vertical *)
+					{x_, {y_, z_}} :> {{x - 1 / 4, y - 1 / 4}, {x + 1 / 4, z}}
+				}]}
+			],
+			Function[{typeColorFunction[#3], Line[Thread[#1]]}]
+		]
+	];
 	pointFunction = If[TrueQ[OptionValue["Thick"]],
 		Function[{colorFunction[#2], Disk[#1, 1 / 4]}],
 		Function[{colorFunction[#2], Point[#]}]
 	];
+	labelFunction = If[	TrueQ[OptionValue["Labeled"]],
+		Function[{line, pos, type},
+			Replace[{line, type}, {
+				{{{x1_, x2_}, y_}, "Lambda"} :> {Text["\[Lambda][", {x1 - 1/8, y}], Text["]", {x2 + 1/8, y}]},
+				{{{x1_, x2_}, y_}, "Application"} :> {Text["(", {x1 - 1/8, y}], Text["@", {(x1 + x2)/2, y}], Text[")", {x2 + 1/8, y}]},
+				{{{x1_, x2_}, y_}, "LambdaApplication"} :> {Text["(", {x1 - 1/8, y}], Text["\[Beta]", {(x1 + x2)/2, y}], Text[")", {x2 + 1/8, y}]},
+				{{x_, {y1_, y2_}}, _} :> Text[Extract[expr, pos], {x - 1/8, y1 - 1/2}]
+			}]
+		],
+		Function[Nothing]
+	];
 	depths = Association @ Reap[LambdaDepths[lambda]][[2]];
-	lines = SortBy[
-		LambdaDiagram[lambda, depths, TrueQ[OptionValue["Extend"]], TrueQ[OptionValue["Pad"]], TrueQ[OptionValue["Thick"]]][[2]],
-		MatchQ[Labeled[{{_, _}, _}, _ -> "LambdaApplication"]]
+	lines = Replace[
+		SortBy[
+			LambdaDiagram[lambda, depths, TrueQ[OptionValue["Extend"]], TrueQ[OptionValue["Pad"]], TrueQ[OptionValue["Thick"]]][[2]],
+			MatchQ[Labeled[{{_, _}, _}, _ -> "LambdaApplication"]]
+		],
+		Labeled[{x_, {y_, y_}}, l_] :> Labeled[{x, {y, y - 1}}, l],
+		1
 	];
 	dots = Switch[OptionValue["Dots"],
 		All,
@@ -835,7 +860,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		True | Automatic,
 		{
 			PointSize[Large],
-			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> Tooltip[pointFunction[{x, y}, type], makeTooltip[pos, "Lambda"]]]
+			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> Tooltip[pointFunction[{x, y}, "Lambda"], makeTooltip[pos, "Lambda"]]]
 		},
 		False | None,
 		Nothing
@@ -847,7 +872,10 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 				Graphics[{
 					MapIndexed[With[{i = #2[[1]], f = lineFunction},
 						Replace[#1, Labeled[line_, pos_ -> type_] :> With[{
-							primitive = Tooltip[Dynamic @ {If[type === "LambdaApplication", Directive[Dashed, AbsoluteThickness[3]], Nothing], style[[i]], f[Thread[line], type]}, makeTooltip[pos, type]]
+							primitive = {
+								Tooltip[Dynamic @ {If[type === "LambdaApplication", Directive[Dashed, AbsoluteThickness[3]], Nothing], style[[i]], f[line, pos, type]}, makeTooltip[pos, type]],
+								labelFunction[line, pos, type]
+							}
 						},
 							EventHandler[primitive,
 								{
@@ -855,7 +883,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 									"MouseExited" :> If[ListQ[style], style[[i]] = Thickness[Medium]],
 									If[	type === "LambdaApplication",
 										"MouseClicked" :> MathLink`CallFrontEnd[FrontEnd`BoxReferenceReplace[FE`BoxReference[EvaluationNotebook[], boxId],
-											ToBoxes[LambdaDiagram[MapAt[BetaReduce[#, 1] &, expr, {pos}], opts]]]
+											ToBoxes[LambdaDiagram[MapAt[BetaSubstitute, expr, {pos}], opts]]]
 										],
 										Nothing
 									]
@@ -875,7 +903,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		,
 		Graphics[{
 			Replace[lines,
-				Labeled[line_, pos_ -> type_] :> Tooltip[lineFunction[Thread[line], type], makeTooltip[pos, type]],
+				Labeled[line_, pos_ -> type_] :> {Tooltip[lineFunction[line, pos, type], makeTooltip[pos, type]], labelFunction[line, pos, type]},
 				1
 			],
 			dots

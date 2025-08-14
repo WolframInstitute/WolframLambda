@@ -456,16 +456,9 @@ UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> $Lambda, Interp
 LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[expr]] //. {Interpretation["\[Lambda]", x_][body_] :> Function[x, body], Interpretation[_Integer, x_] :> x})
 
 
-(* FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
-	Verbatim[Function][var_, body_][x_] :> $Lambda[FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
-	Verbatim[Function][var_, body_] :> $Lambda[FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
-	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
-	var_Symbol :> Replace[var, vars]
-}] *)
-
 FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
-	Verbatim[Function][var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
-	Verbatim[Function][var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
+	($Lambda | Function)[var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
+	($Lambda | Function)[var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
 	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
 	var_Symbol :> Interpretation[Evaluate[Replace[var, vars]], var]
 }]

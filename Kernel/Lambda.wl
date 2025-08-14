@@ -647,8 +647,8 @@ ColorizeTaggedLambda[lambda_, colorFunction_ : $DefaultColorFunction] := With[{l
 ColorizeLambda[expr_, args___] := ColorizeTaggedLambda[TagLambda[expr], args]
 
 
-LambdaRow[Interpretation["\[Lambda]", tag_][body_], depth_ : 0] := {{$Lambda[tag] -> depth, Splice[LambdaRow[body, depth + 1]]}}
-LambdaRow[Interpretation[i_Integer, tag_], ___] := {i -> tag}
+LambdaRow[Interpretation["\[Lambda]", tag_][body_], depth_ : 0] := {{$Lambda[HoldForm[tag]] -> depth, Splice[LambdaRow[body, depth + 1]]}}
+LambdaRow[Interpretation[i_Integer, tag_], ___] := {i -> HoldForm[tag]}
 LambdaRow[(f : Except[Interpretation["\[Lambda]", _]])[(g : Except[Interpretation["\[Lambda]", _]])[x_]], depth_ : 0] := Append[LambdaRow[f, depth], LambdaRow[g[x], depth]]
 LambdaRow[f_[x_], depth_ : 0] := Join[LambdaRow[f, depth], LambdaRow[x, depth]]
 LambdaRow[x_, ___] := {x}
@@ -894,7 +894,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 			TrueQ[OptionValue["Thick"]],
 			TrueQ[OptionValue["Alternative"]]
 		][[2]],
-		MatchQ[Labeled[{{_, _}, _}, _ -> "LambdaApplication"]]
+		MatchQ[Labeled[_, _ -> "LambdaApplication" | "Term"]]
 	];
 	dots = Switch[OptionValue["Dots"],
 		All,

@@ -445,12 +445,12 @@ TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = Ta
 	]
 ]
 
-TagLambda[expr_, form_String : "Alphabet"] := expr /. lambda_$Lambda :> TagLambda[lambda, form]
+TagLambda[expr_, form_String : "Alphabet"] := expr /. lambda : $Lambda[_] :> TagLambda[lambda, form]
 
 ResourceFunction["AddCodeCompletion"]["TagLambda"][None, {"Alphabet", "Unique"}]
 
 
-UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> $Lambda, Interpretation[x_, _] :> x}
+UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> $Lambda, Interpretation[x_, _] :> x,  l : $Lambda[_, _] :> FunctionLambda[l]}
 
 
 LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[expr]] //. {Interpretation["\[Lambda]", x_][body_] :> Function[x, body], Interpretation[_Integer, x_] :> x})
@@ -464,36 +464,64 @@ FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 }]
 
 
-Options[LambdaTree] = Join[{"Colored" -> False, "ArgumentLabels" -> True, "ApplicationLabel" -> None, ColorFunction -> $DefaultColorFunction}, Options[Tree]]
+$DefaultLambdaTreeColors = {"Lambda" -> $Red, "Application" -> $Blue, "Variable" -> $Green, "Labels" -> $White}
 
-LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{colors = <||>},
-	ExpressionTree[
-		ColorizeLambda[lambda, OptionValue[ColorFunction]] //. (f : Except[Style[Interpretation["\[Lambda]", _], __]])[x_] :> Application[f, x] //. Style[Interpretation[_, tag_], style__] :>
-			With[{node = ToString[Unevaluated[tag]]}, AppendTo[colors, TreeCases[node] -> Directive[style]]; node],
-		"Heads", FilterRules[{opts}, Options[Tree]], Heads -> False, 
-		TreeElementLabelStyle -> If[MatchQ[OptionValue["Colored"], "Labels" | True | Automatic],
-			Normal[colors],
-			{}
-		],
-		TreeElementStyle -> Switch[OptionValue["Colored"],
-			"Elements",
-			Normal[colors],
-			"Labels" | True | Automatic,
-			{All -> White},
-			_,
-			{"Leaves" -> $Green, _ -> $Red}
-		],
-		TreeElementLabel -> TreeCases[Application] -> OptionValue["ApplicationLabel"],
-		TreeElementShapeFunction -> TreeCases[Application] -> None,
-		TreeElementLabelFunction -> If[TrueQ[OptionValue["ArgumentLabels"]], Automatic, {"NonLeaves" -> Function[If[# === Application, OptionValue["ApplicationLabel"], Subscript["\[Lambda]", #]]]}]
-	]
+Options[LambdaTree] = Join[{
+	"Colored" -> Automatic, "ApplicationLabel" -> None, "VariableLabels" -> False,
+	ColorFunction -> $DefaultColorFunction,
+	ColorRules -> $DefaultLambdaTreeColors
+},
+	Options[Tree]
+]
+
+lambdaTree[(l : $LambdaPattern)[body_], opts___] := Tree[l, {lambdaTree[body]}, opts]
+lambdaTree[f_[x_], opts___] := Tree[Application, {lambdaTree[f], lambdaTree[x]}, opts]
+lambdaTree[expr_, opts___] := Tree[expr, None, opts]
+
+LambdaTree[lambda_, opts : OptionsPattern[]] := With[{
+	taggedLambda = TagLambda[lambda],
+	colored = OptionValue["Colored"],
+	colorRules = Join[Cases[Flatten[{OptionValue["ColorRules"]}], _Rule | _RuleDelayed], $DefaultLambdaTreeColors],
+	appLabel = OptionValue["ApplicationLabel"],
+	variablesQ = TrueQ[OptionValue["VariableLabels"]]
+},
+	Block[{colors = {}, appColor = TreeCases[Application] -> Replace["Application", colorRules]},
+		lambdaTree[
+			ColorizeLambda[taggedLambda, OptionValue[ColorFunction]] /.
+				Style[node : Interpretation[e_, tag_], style__] :>
+					(If[e === "\[Lambda]", AppendTo[colors, TreeCases[Interpretation[_, tag]] -> Directive[style]]]; node)
+			,
+			FilterRules[{opts}, Options[Tree]],
+			TreeElementLabelStyle -> If[MatchQ[colored, "Labels" | True],
+				colors,
+				{}
+			],
+			TreeElementStyle -> Switch[colored,
+				Automatic | "Elements",
+				Append[colors, appColor],
+				"Labels" | True,
+				{All -> Replace["Labels", colorRules]},
+				"Leaves",
+				{TreeCases[$LambdaPattern] -> Replace["Lambda", colorRules], "Leaves" -> Replace["Variable", colorRules], appColor},
+				_,
+				{}
+			],
+			TreeElementShapeFunction -> TreeCases[Application] -> If[appLabel === None, None, Automatic],
+			TreeElementLabelFunction -> {
+				"Leaves" -> If[variablesQ, Last, Identity],
+				TreeCases[Application] -> Function[appLabel],
+				"NonLeaves" -> If[variablesQ, Function[Subscript["\[Lambda]", Last[#]]], Function["\[Lambda]"]]
+			}
+		]
+]
 ]
 
 LambdaMinimalTree[lambda_, opts___] := LambdaTree[lambda,
 	opts,
 	ImageSize -> {Automatic, UpTo[100]}, 
    	TreeElementShapeFunction -> {TreeCases[Application] -> Function[Inset[Graphics[Disk[{0, 0}], ImageSize -> 4], #1]],  All -> None},
-	TreeElementLabel -> {All -> None}
+	TreeElementLabel -> {TreeCases[_] -> None},
+	TreeElementLabelFunction -> {TreeCases[_] -> None}
 ]
 
 LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda, "Colored" -> True, "ArgumentLabels" -> False]},
@@ -691,9 +719,9 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	vars = Extract[row, varPos];
 	colors = Association @ MapIndexed[#1[[1, 1]] -> colorFunction[#2[[1]]] &, Extract[row, lambdaPos]];
 	row = row //
-		MapAt[Style["\[Lambda]", Lookup[colors, #[[1, 1]], Black]] &, lambdaPos] //
-		MapAt[Style[#[[If[argQ, 2, 1]]], Lookup[colors, #[[2]], Black]] &, varPos] //
-		MapAt[Style[#[[1, 1]], Lookup[colors, #[[1, 1]], Black]] &, argPos];
+		MapAt[Style["\[Lambda]", Lookup[colors, #[[1, 1]], $Black]] &, lambdaPos] //
+		MapAt[Style[#[[If[argQ, 2, 1]]], Lookup[colors, #[[2]], $Black]] &, varPos] //
+		MapAt[Style[#[[1, 1]], Lookup[colors, #[[1, 1]], $Black]] &, argPos];
 	
 	arrows = MapThread[With[{dh = Ceiling[#1[[1]] / 2], sign = (-1) ^ Boole[EvenQ[#1[[1]]]], h = If[argQ, args, lambdas][#1[[2]]], l = lambdas[#1[[2]]]},
 		If[MissingQ[l] || MissingQ[h], Nothing, {colors[#1[[2]]], Line[Threaded[{spacing, sign}] * {{#2, 1}, {#2, 1 + dh / (l[[2]] + 1)}, {h[[1]], 1 + dh / (l[[2]] + 1)}, {h[[1]], 1}}]}]] &,
@@ -708,9 +736,9 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	]
 ]
 
-{$Red, $Green, $Blue, $Yellow, $Gray} = If[$VersionNumber >= 14.3,
-	{StandardRed, StandardGreen, StandardBlue, StandardYellow, StandardGray},
-	{Red, Green, Blue, LightYellow, Gray}
+{$Black, $White, $Red, $Green, $Blue, $Yellow, $Gray} = If[$VersionNumber >= 14.3,
+	{LightDarkSwitched[Black, White], LightDarkSwitched[White, Black], StandardRed, StandardGreen, StandardBlue, StandardYellow, StandardGray},
+	{White, Black, Red, Green, Blue, LightYellow, Gray}
 ]
 
 $LambdaDiagramColorRules = {
@@ -850,7 +878,8 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	lambda = TagLambda[UntagLambda[expr]], depths, lines, dots,
 	colorRules = Replace[OptionValue[ColorRules], {Automatic -> $LambdaDiagramColorRules, rules : {(_Rule | _RuleDelayed) ...} :> Join[rules, $LambdaDiagramColorRules]}],
 	lineFunction, pointFunction, labelFunction,
-	alternative = TrueQ[OptionValue["Alternative"]]
+	alternative = TrueQ[OptionValue["Alternative"]],
+	labeled = OptionValue["Labeled"]
 },
 	With[{typeColorFunction =
 		If[ TrueQ[OptionValue["Colored"]],
@@ -875,16 +904,21 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		Function[{Replace[#2, colorRules], Disk[#1, 1 / 4]}],
 		Function[{Replace[#2, colorRules], Point[#]}]
 	];
-	labelFunction = If[	TrueQ[OptionValue["Labeled"]],
-		Function[{line, pos, type},
-			Replace[{line, type}, {
-				{{{x1_, x2_}, y_}, "Lambda"} :> {Text["\[Lambda][", {x1 - 1/8, y}], Text["]", {x2 + 1/8, y}]},
-				{{{x1_, x2_}, y_}, "Application"} :> {Text["(", {x1 - 1/8, y}], Text["@", {(x1 + x2)/2, y}], Text[")", {x2 + 1/8, y}]},
-				{{{x1_, x2_}, y_}, "LambdaApplication"} :> {Text["(", {x1 - 1/8, y}], Text["\[Beta]", {(x1 + x2)/2, y}], Text[")", {x2 + 1/8, y}]},
-				{{x_, {y1_, y2}}, "Term"} :> Text[Extract[expr, {pos}][[1]], {x - 1/8, y1 - 1/2}],
-				{{x_, {y1_, y2_}}, _} :> If[! alternative && y1 == y2, Nothing, Text[Extract[expr, {pos}][[1]], If[alternative && y1 == y2, {x, y1 - 1/8}, {x - 1/8, y1 - 1/2}]]]
-			}]
+	labelFunction = Switch[labeled,
+		True | All | Full | Automatic, With[{
+			termRule = If[labeled === Automatic, {_, "Term"} -> Nothing, {{x_, {y1_, y2}}, "Term"} :> Text[Extract[expr, {pos}][[1]], {x - 1/8, y1 - 1/2}]]
+		},
+			Function[{line, pos, type},
+				Replace[{line, type}, {
+					{{{x1_, x2_}, y_}, "Lambda"} :> {Text["\[Lambda][", {x1 - 1/8, y}], Text["]", {x2 + 1/8, y}]},
+					{{{x1_, x2_}, y_}, "Application"} :> {Text["(", {x1 - 1/8, y}], Text["@", {(x1 + x2)/2, y}], Text[")", {x2 + 1/8, y}]},
+					{{{x1_, x2_}, y_}, "LambdaApplication"} :> {Text["(", {x1 - 1/8, y}], Text["\[Beta]", {(x1 + x2)/2, y}], Text[")", {x2 + 1/8, y}]},
+					termRule,
+					{{x_, {y1_, y2_}}, _} :> If[! alternative && y1 == y2, Nothing, Text[Extract[expr, {pos}][[1]], If[alternative && y1 == y2, {x, y1 - 1/8}, {x - 1/8, y1 - 1/2}]]]
+				}]
+			]
 		],
+		False | None,
 		Function[Nothing]
 	];
 	depths = Association @ Reap[LambdaDepths[lambda]][[2]];
@@ -960,9 +994,10 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 
 
 $LambdaBusyBeavers := $LambdaBusyBeavers = ParseLambda[StringReplace[#, "\\" -> "\[Lambda]"], "Indices"] & /@ 
- 	Cases[
+ 	FirstCase[
   		Import["https://wiki.bbchallenge.org/wiki/Busy_Beaver_for_lambda_calculus", "XMLObject"],
-  		XMLElement["table", {"class" -> "wikitable"}, table_] :> Splice @ Most @ Cases[table, XMLElement["code", {}, {code_}] :> code, All],
+  		XMLElement["table", {"class" -> "wikitable"}, table_] :> Most @ Cases[table, XMLElement["code", {}, {code_}] :> code, All],
+		{},
   		All
   	]
 

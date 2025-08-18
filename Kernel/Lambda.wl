@@ -63,6 +63,7 @@ ColorizeLambda;
 LambdaSmiles;
 LambdaDiagram;
 
+ChurchNumeral;
 $LambdaBusyBeavers;
 
 
@@ -991,6 +992,12 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		]
 	]
 ]
+
+
+(* Special lambdas *)
+
+SetAttributes[ChurchNumeral, Listable]
+ChurchNumeral[n_Integer ? NonNegative] := $Lambda[$Lambda[Nest[2, 1, n]]]
 
 
 $LambdaBusyBeavers := $LambdaBusyBeavers = ParseLambda[StringReplace[#, "\\" -> "\[Lambda]"], "Indices"] & /@ 

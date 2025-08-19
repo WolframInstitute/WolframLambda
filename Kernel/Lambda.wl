@@ -64,6 +64,7 @@ LambdaSmiles;
 LambdaDiagram;
 
 ChurchNumeral;
+FromChurchNumeral;
 $LambdaBusyBeavers;
 
 
@@ -992,6 +993,13 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 SetAttributes[ChurchNumeral, Listable]
 ChurchNumeral[n_Integer ? NonNegative] := $Lambda[$Lambda[Nest[2, 1, n]]]
 
+
+fromChurchNumeral[(Interpretation[1, _] | 1), n_] := n
+fromChurchNumeral[(Interpretation[2, _] | 2)[rest_], n_Integer : 0] := fromChurchNumeral[rest, n + 1]
+fromChurchNumeral[expr_, _] := Failure["UnrecognizedChurchNumeral", <|"Message" -> "Unrecognised term: ``", "MessageParameters" -> expr|>]
+
+FromChurchNumeral[$LambdaPattern[$LambdaPattern[expr_]]] := fromChurchNumeral[expr, 0]
+FromChurchNumeral[_] := Failure["UnrecognizedChurchNumeral", <|"Message" -> "Church numeral should be of the form \[Lambda][\[Lambda][2[2[...[1]]]]]"|>]
 
 $LambdaBusyBeavers := $LambdaBusyBeavers = ParseLambda[StringReplace[#, "\\" -> "\[Lambda]"], "Indices"] & /@ 
  	FirstCase[

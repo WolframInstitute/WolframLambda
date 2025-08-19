@@ -287,7 +287,7 @@ BetaPositionReductions[expr_, n : _Integer | Infinity : Infinity, opts : Options
 
 Options[BetaReduce] = Options[BetaReducePositions]
 
-BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
+BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := 
  	FixedPoint[MapAt[BetaSubstitute, #, BetaReducePositions[#, m, opts]] &, expr, n]
 
 Options[BetaReduceList] = Options[BetaReduce]

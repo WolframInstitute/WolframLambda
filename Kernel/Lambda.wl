@@ -322,7 +322,7 @@ LambdaSubstitute[expr_, vars_Association : <||>, offset_Integer : 0] :=
 		Replace[expr, {
 			(lambda : $LambdaPattern)[body_] :> lambda[LambdaSubstitute[body, vars, offset + 1]],
 			(lambda : $LambdaPattern)[body_][arg_] :> lambda[LambdaSubstitute[body, vars, offset + 1]][LambdaSubstitute[arg, vars, offset]],
-			var_Integer | Interpretation[var_Integer, _] :> offsetFree[Lookup[vars, var - offset, var], offset],
+			var_Integer | Interpretation[var_Integer, _] :> Lookup[vars, var - offset, var, offsetFree[#, offset] &],
 			f_[x_] :> LambdaSubstitute[f, vars, offset][LambdaSubstitute[x, vars, offset]]
 		}]
 	]

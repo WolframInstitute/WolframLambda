@@ -468,7 +468,7 @@ FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 $DefaultLambdaTreeColors = {"Lambda" -> $Red, "Application" -> $Blue, "Variable" -> $Green, "Labels" -> $White}
 
 Options[LambdaTree] = Join[{
-	"Colored" -> Automatic, "ApplicationLabel" -> None, "VariableLabels" -> False,
+	"Colored" -> False, "ApplicationLabel" -> None, "VariableLabels" -> False,
 	ColorFunction -> $DefaultColorFunction,
 	ColorRules -> $DefaultLambdaTreeColors
 },
@@ -525,25 +525,18 @@ LambdaMinimalTree[lambda_, opts___] := LambdaTree[lambda,
 	TreeElementLabelFunction -> {TreeCases[_] -> None}
 ]
 
-LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[lambda, "Colored" -> True, "ArgumentLabels" -> False]},
+LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[TagLambda[UntagLambda[lambda], "Alphabet"], "VariableLabels" -> True]},
 	VertexReplace[
-		TreeGraph[
-			TreeMap[
-				\[FormalL], 
-				tree,
-				"Leaves"
-			],
-			VertexCoordinates -> GraphEmbedding[tree, "SymmetricLayeredEmbedding"]
-		]
+		TreeGraph[tree]
 		,
 		{
-			{\[FormalL][v_], _} :> Interpretation[v, {}],
 			{Application, pos_} :> Interpretation["@", pos],
-			{v_, pos_} :> Interpretation[Subscript["\[Lambda]", v], pos]
+			{Interpretation["\[Lambda]", tag_], pos_} :> Interpretation[Subscript["\[Lambda]", tag], pos],
+			{Interpretation[_, tag_], pos_} :> tag
 		}
 		,
 		opts,
-		(* VertexShapeFunction -> Trees`$TreeVertexShapeFunction, *)
+		GraphLayout -> "SymmetricLayeredEmbedding",
 		VertexShapeFunction -> Function[
 			Trees`$TreeVertexShapeFunction[
 				#2,

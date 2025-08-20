@@ -65,6 +65,7 @@ LambdaDiagram;
 
 ChurchNumeral;
 FromChurchNumeral;
+ChurchNumeralQ;
 $LambdaBusyBeavers;
 
 
@@ -994,12 +995,33 @@ SetAttributes[ChurchNumeral, Listable]
 ChurchNumeral[n_Integer ? NonNegative] := $Lambda[$Lambda[Nest[2, 1, n]]]
 
 
-fromChurchNumeral[(Interpretation[1, _] | 1), n_] := n
-fromChurchNumeral[(Interpretation[2, _] | 2)[rest_], n_Integer : 0] := fromChurchNumeral[rest, n + 1]
-fromChurchNumeral[expr_, _] := Failure["UnrecognizedChurchNumeral", <|"Message" -> "Unrecognised term: ``", "MessageParameters" -> expr|>]
+fromChurchNumeral[expr_] := Block[{term = expr, count = 0},
+	While[True,
+		If[	MatchQ[term, Interpretation[1, _] | 1],
+			Return[count]
+		];
+		
+		If[ MatchQ[term, (Interpretation[2, _] | 2)[_]],
+			term = term[[1]];
+			count++;
+			Continue[];
+		];
+		
+		Return[
+			Failure["UnrecognizedChurchNumeral",
+				<|"MessageTemplate" -> "Unrecognised term: ``", "MessageParameters" -> expr|>
+			]
+		];
+	]
+]
 
-FromChurchNumeral[$LambdaPattern[$LambdaPattern[expr_]]] := fromChurchNumeral[expr, 0]
-FromChurchNumeral[_] := Failure["UnrecognizedChurchNumeral", <|"Message" -> "Church numeral should be of the form \[Lambda][\[Lambda][2[2[...[1]]]]]"|>]
+FromChurchNumeral[$LambdaPattern[$LambdaPattern[expr_]]] := fromChurchNumeral[expr]
+
+FromChurchNumeral[_] := Failure["UnrecognizedChurchNumeral", <|"MessageTemplate" -> "Church numeral should be of the form \[Lambda][\[Lambda][2[2[...[1]]]]]"|>]
+
+
+ChurchNumeralQ[expr_] := ! FailureQ[FromChurchNumeral[expr]]
+
 
 $LambdaBusyBeavers := $LambdaBusyBeavers = ParseLambda[StringReplace[#, "\\" -> "\[Lambda]"], "Indices"] & /@ 
  	FirstCase[

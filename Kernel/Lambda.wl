@@ -543,7 +543,7 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[TagLamb
 			Trees`$TreeVertexShapeFunction[
 				#2,
 				Directive[Trees`$TreeVertexColor, Trees`$TreeVertexFrameStyle],
-				MatchQ[#2, Except[{_, {1, ___}}]]
+				MatchQ[#2, Except[_Interpretation]]
 			][##]
 		],
 		EdgeShapeFunction -> Trees`$TreeEdgeShapeFunction,

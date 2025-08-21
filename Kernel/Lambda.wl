@@ -1051,7 +1051,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 
 Options[BetaReduceStepPlot] = Join[
 	{
-		"Width" -> .4, "ShowOutput" -> False,
+		"Width" -> .4, "ShowInput" -> True, "ShowOutput" -> False, "ClipBounds" -> True,
 		ColorRules -> {"Input" -> StandardRed, "Output" -> StandardGreen}
 	},
 	Options[BetaReduceList],
@@ -1068,7 +1068,9 @@ BetaReduceStepPlot[lambda_, n : _Integer | Infinity : Infinity, opts : OptionsPa
 
 BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] := Block[{
 	width = OptionValue["Width"],
+	showInputQ = TrueQ[OptionValue["ShowInput"]],
 	showOutputQ = TrueQ[OptionValue["ShowOutput"]],
+	clipBoundsQ = TrueQ[OptionValue["ClipBounds"]],
 	inputColor = Lookup[OptionValue[ColorRules], "Input"],
 	outputColor = Lookup[OptionValue[ColorRules], "Output"],
 	columns
@@ -1086,23 +1088,32 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] := Bloc
 		{
 			LeafCount[src],
 			{
-				inputColor,
-				Tooltip[
-					Rectangle @@ Thread[{
-						If[ showOutputQ,
-							{i + .25 - width / 2, i + .25 + width / 2},
-							{i - width / 2, i + width / 2}
-						],
-						Catenate[Lookup[PositionIndex[srcPos], srcSubPos]]
-					}],
-					srcTerm
-				],
+				If[	showInputQ,
+					{
+						inputColor,
+						Tooltip[
+							Rectangle @@ Thread[{
+								If[ showOutputQ,
+									{i + .25 - width / 2, i + .25 + width / 2},
+									{i - width / 2, i + width / 2}
+								],
+								Catenate[Lookup[PositionIndex[srcPos], srcSubPos]]
+							}],
+							srcTerm
+						]
+					},
+					Nothing
+				]
+				,
 				If[ showOutputQ,
 					{
 						outputColor,
 						Tooltip[
-							Rectangle @@ Thread[{{
-								i + .75 - width / 2, i + .75 + width / 2},
+							Rectangle @@ Thread[{
+								If[	showInputQ,
+									{i + .75 - width / 2, i + .75 + width / 2},
+									{i + 1 - width / 2, i + 1 + width / 2}
+								],
 								Catenate[Lookup[PositionIndex[tgtPos], tgtSubPos]]
 							}],
 							srcTerm
@@ -1123,7 +1134,7 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] := Bloc
 	ListStepPlot[
 		columns[[All, 1]], Center,
 		FilterRules[{opts}, Options[ListStepPlot]],
-		PlotRange -> {{.5, All}, {1, All}},
+		PlotRange -> {{If[clipBoundsQ && ! showInputQ, 1.5, .5], Length[path] + If[clipBoundsQ && ! showOutputQ, -.5, .5]}, {1, All}},
 		Filling -> Axis,
 		Epilog -> columns[[All, 2]],
 		PlotStyle -> Opacity[.4],

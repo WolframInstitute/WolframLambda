@@ -26,6 +26,7 @@ LambdaSubstitute;
 EvalLambda;
 LambdaFreeVariables;
 
+ApplicativePosition;
 BetaSubstitute;
 BetaReducePositions;
 BetaNormalQ;
@@ -268,12 +269,47 @@ OuterPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] :
 	positions
 ]
 
+ApplicativePosition[expr_, n : _Integer | Infinity : Infinity, pos_List : {}] := Block[{k = n, curPos, curPositions, positions = {}},
+	If[ k < 1, Return[{}]];
+	If[ MatchQ[expr, $LambdaPattern[_][_]],
+		positions = ApplicativePosition[expr[[1]], n, Append[pos, 1]];
+		k -= Length[positions];
+		(k -= Length[#]; positions = Join[positions, #]) & @ ApplicativePosition[expr[[0]], k, Append[pos, 0]];
+		If[ k > 0,
+			positions = Append[positions, pos],
+			k--
+		]
+		,
+		If[ k > 0 && ! AtomQ[expr],
+			Do[
+				curPos = Append[pos, i];
+				curPositions = With[{subExpr = Extract[expr, i]}, ApplicativePosition[subExpr, k, curPos]];
+				positions = Join[positions, curPositions];
+				k -= Length[curPositions];
+				If[k < 1, Break[]];
+				,
+				{i, Range[0, Length[Unevaluated[expr]]]}
+			]
+		];
+	];
+
+	positions
+]
+
 Options[BetaReducePositions] = Options[TreePosition]
 
-BetaReducePositions[expr_, n : _Integer | Infinity : Infinity] := OuterPosition[expr, $LambdaPattern[_][_], n]
-
-BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := 
-	TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], $LambdaPattern[_][_], All, n, opts, TreeTraversalOrder -> "DepthFirst"] - 1
+BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := With[{order = OptionValue[TreeTraversalOrder]},
+	Switch[order,
+		"Applicative",
+		ApplicativePosition[expr, n],
+		Automatic | "Normal" | "Outermost" | "BreadthFirst",
+		OuterPosition[expr, $LambdaPattern[_][_], n],
+		"Random",
+		RandomSample[Position[expr, $LambdaPattern[_][_], Heads -> True], UpTo[n]],
+		_,
+		TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], $LambdaPattern[_][_], All, n, TreeTraversalOrder -> order] - 1
+	]
+]
 
 
 BetaNormalQ[expr_] := FreeQ[expr, $LambdaPattern[_][_]]

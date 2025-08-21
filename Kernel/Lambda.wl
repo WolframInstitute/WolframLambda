@@ -79,8 +79,9 @@ Begin["`Private`"];
 (*Definitions*)
 If[! ValueQ[$Lambda],
 	$Lambda = \[FormalLambda];
-	$LambdaPattern = $Lambda | Interpretation["\[Lambda]", _]
 ]
+
+$LambdaPattern = $Lambda | Interpretation["\[Lambda]", _]
 
 
 constructGroupings = Function[Groupings[#, Construct -> 2]]
@@ -590,11 +591,14 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[TagLamb
 ]
 
 
-LambdaApplication[lambda_, ___] := lambda //. (f : Except[$Lambda])[x_] :> Application[f, x]
+LambdaApplication[lambda_, ___] := lambda //. (f : Except[$LambdaPattern])[x_] :> Application[f, x]
 
 LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {(l : Interpretation["\[Lambda]", tag_])[arg_] :> $Lambda[tag, arg], Interpretation[_Integer, tag_]:> tag}
 
-LambdaRightApplication[lambda_, sym_ : "@", ___] := OutputForm[lambda //. (f : Except[$Lambda])[x_] :> Infix[SmallCircle[f, x], sym, 500, Right]]
+LambdaRightApplication[lambda_, sym_ : "@", ___] :=
+	lambda //. (x : Except[$LambdaPattern | Row])[y_] :> Row[{x, sym, y}] //.
+		Row[{prefix : Except[sym] ..., Row[{a__, sym, b__}], c__}] :> Row[{prefix, "(", a, sym, b, ")", c}]
+
 
 LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. ToString[$Lambda] | "\[Application]" -> "\[InvisibleSpace]"]
 
@@ -721,7 +725,7 @@ Options[LambdaSmiles] = Join[
 ];
 LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	row = LambdaRow[TagLambda[lambda]],
-	lambdaPos, varPos, argPos, lambdas, vars, args, colors, arrows,
+	lambdaPos, varPos, argPos, lambdas, maxDepth, vars, args, colors, arrows,
 	height = OptionValue["Height"], spacing = OptionValue["Spacing"],
 	argQ = TrueQ[OptionValue["Arguments"]],
 	colorFunction = OptionValue[ColorFunction],
@@ -757,16 +761,24 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 		MapAt[Style[#[[If[argQ, 2, 1]]], Lookup[colors, #[[2]], $Black]] &, varPos] //
 		MapAt[Style[#[[1, 1]], Lookup[colors, #[[1, 1]], $Black]] &, argPos];
 	
-	arrows = MapThread[With[{dh = Ceiling[#1[[1]] / 2], sign = (-1) ^ Boole[EvenQ[#1[[1]]]], h = If[argQ, args, lambdas][#1[[2]]], l = lambdas[#1[[2]]]},
-		If[MissingQ[l] || MissingQ[h], Nothing, {colors[#1[[2]]], Arrowheads[Replace[OptionValue["Arrow"], {False | None -> 0, True | Automatic -> Small}]], Arrow[Threaded[{spacing, sign}] * {{#2, 1}, {#2, 1 + dh / (l[[2]] + 1)}, {h[[1]], 1 + dh / (l[[2]] + 1)}, {h[[1]], 1}}]}]] &,
+	arrows = MapThread[
+		With[{dh = height * Ceiling[#1[[1]] / 2], sign = (-1) ^ Boole[EvenQ[#1[[1]]]], h = lambdas[#1[[2]]], l = lambdas[#1[[2]]]},
+			If[	MissingQ[l] || MissingQ[h],
+				Nothing,
+				{
+					colors[#1[[2]]],
+					Arrowheads[Replace[OptionValue["Arrow"], {False | None -> 0, True | Automatic -> Small}]],
+					Arrow[Threaded[{spacing, sign}] * {{#2, 1}, {#2, 1 + dh / (l[[2]] + 1)}, {h[[1]], 1 + dh / (l[[2]] + 1)}, {h[[1]], 1}}]
+				}
+			]
+		] &,
 		{vars, First /@ varPos}
 	];
 	Graphics[{
 		MapIndexed[Inset[Style[#1, styleOpts, FontSize -> 16], {spacing * #2[[1]], 0}] &, row],
 		arrows
 	},
-		FilterRules[{opts}, Options[Graphics]],
-		AspectRatio -> height / Length[row]
+		FilterRules[{opts}, Options[Graphics]]
 	]
 ]
 

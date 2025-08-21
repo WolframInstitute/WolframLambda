@@ -50,6 +50,8 @@ FunctionLambda;
 LambdaTree;
 LambdaMinimalTree;
 LambdaGraph;
+BetaReduceStepPlot;
+
 LambdaConvert;
 ParseLambda;
 LambdaBLC;
@@ -289,7 +291,7 @@ BetaPositionReductions[expr_, n : _Integer | Infinity : Infinity, opts : Options
 Options[BetaReduce] = Options[BetaReducePositions]
 
 BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := 
- 	FixedPoint[MapAt[BetaSubstitute, #, BetaReducePositions[#, m, opts]] &, expr, n]
+ 	FixedPoint[MapAt[BetaSubstitute, #, Sow[BetaReducePositions[#, m, opts], "Positions"]] &, expr, n]
 
 Options[BetaReduceList] = Options[BetaReduce]
 
@@ -985,6 +987,90 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		},
 			FilterRules[{opts}, Options[Graphics]]
 		]
+	]
+]
+
+
+Options[BetaReduceStepPlot] = Join[
+	{
+		"Width" -> .4, "ShowOutput" -> False,
+		ColorRules -> {"Input" -> StandardRed, "Output" -> StandardGreen}
+	},
+	Options[BetaReduceList],
+	Options[ListStepPlot]
+];
+
+BetaReduceStepPlot[lambda_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{
+	positions, path
+},
+	positions = Flatten[Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]], 2];
+	path = Take[path, Length[positions] + 1];
+	BetaReduceStepPlot[path -> positions, opts]
+]
+
+BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] := Block[{
+	width = OptionValue["Width"],
+	showOutputQ = TrueQ[OptionValue["ShowOutput"]],
+	inputColor = Lookup[OptionValue[ColorRules], "Input"],
+	outputColor = Lookup[OptionValue[ColorRules], "Output"],
+	columns
+},
+	columns = Append[{LeafCount[Last[path]], {}}] @ MapThread[{src, tgt, pos, i} |-> With[{
+		srcTerm = Extract[src, {pos}][[1]],
+		tgtTerm = Extract[tgt, {pos}][[1]]
+	},
+	{
+		srcPos = LexicographicSort @ Position[src, _, {-1}, Heads -> True],
+		srcSubPos = Join[pos, #] & /@ LexicographicSort[Position[srcTerm, _, {-1}, Heads -> True]][[{1, -1}]],
+		tgtPos = LexicographicSort @ Position[tgt, _, {-1}, Heads -> True],
+		tgtSubPos = Join[pos, #] & /@ LexicographicSort[Position[tgtTerm, _, {-1}, Heads -> True]][[{1, -1}]]
+	},
+		{
+			LeafCount[src],
+			{
+				inputColor,
+				Tooltip[
+					Rectangle @@ Thread[{
+						If[ showOutputQ,
+							{i + .25 - width / 2, i + .25 + width / 2},
+							{i - width / 2, i + width / 2}
+						],
+						Catenate[Lookup[PositionIndex[srcPos], srcSubPos]]
+					}],
+					srcTerm
+				],
+				If[ showOutputQ,
+					{
+						outputColor,
+						Tooltip[
+							Rectangle @@ Thread[{{
+								i + .75 - width / 2, i + .75 + width / 2},
+								Catenate[Lookup[PositionIndex[tgtPos], tgtSubPos]]
+							}],
+							srcTerm
+						]
+					},
+					Nothing
+				]
+			}
+		}
+		],
+		{
+			Most[path],
+			Rest[path],
+			positions,
+			Range[Length[positions]]
+		}
+	];
+	ListStepPlot[
+		columns[[All, 1]], Center,
+		FilterRules[{opts}, Options[ListStepPlot]],
+		PlotRange -> {{.5, All}, {1, All}},
+		Filling -> Axis,
+		Epilog -> columns[[All, 2]],
+		PlotStyle -> Opacity[.4],
+		Frame -> True,
+		AspectRatio -> .4
 	]
 ]
 

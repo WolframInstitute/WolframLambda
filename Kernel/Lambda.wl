@@ -229,12 +229,22 @@ offsetFree[fun_[x_], offset_, depth_ : 0] := offsetFree[fun, offset, depth][offs
 offsetFree[var_Integer, offset_, depth_ : 0] := If[var > depth, var + offset, var]
 offsetFree[expr_, offset_, depth_ : 0] := expr
 
+
+$betaSubstituteCounter
+
 (* perform a substitution of an argument into the body of a lambda, and also decrement the free parameters by one *)
 betaSubstitute[(lambda : $LambdaPattern)[body_], arg_, paramIdx_ : 1] := lambda[betaSubstitute[body, arg, paramIdx + 1]]
-betaSubstitute[v : Interpretation[var_Integer, _], arg_, paramIdx_ : 1] := Which[
-	var < paramIdx, v,
-	var == paramIdx, offsetFree[arg, paramIdx - 1],
-	var > paramIdx, ReplacePart[v, 1 -> var - 1]
+betaSubstitute[v : Interpretation[var_Integer, tag_], arg_, paramIdx_ : 1] := Block[{index = <||>},
+	Which[
+		var < paramIdx, v,
+		var == paramIdx, offsetFree[arg, paramIdx - 1] /. {
+			Interpretation["\[Lambda]", subTag_][body_] :> With[{i = Lookup[$betaSubstituteCounter, subTag, $betaSubstituteCounter[subTag] = 0]},
+				$betaSubstituteCounter[subTag]++;
+				Interpretation["\[Lambda]", tag -> Subscript[subTag, i]][body /. Interpretation[e_, subTag] :> Interpretation[e, tag -> Subscript[subTag, i]]]
+			]
+		},
+		var > paramIdx, ReplacePart[v, 1 -> var - 1]
+	]
 ]
 betaSubstitute[fun_[x_], arg_, paramIdx_ : 1] := betaSubstitute[fun, arg, paramIdx][betaSubstitute[x, arg, paramIdx]]
 betaSubstitute[var_Integer, arg_, paramIdx_ : 1] := Which[
@@ -244,7 +254,7 @@ betaSubstitute[var_Integer, arg_, paramIdx_ : 1] := Which[
 ]
 betaSubstitute[expr_, arg_, paramIdx_ : 1] := expr
 
-BetaSubstitute[$LambdaPattern[body_][arg_]] := betaSubstitute[body, arg]
+BetaSubstitute[$LambdaPattern[body_][arg_]] := Block[{$betaSubstituteCounter = <||>}, betaSubstitute[body, arg]]
 BetaSubstitute[expr_] := expr
 
 

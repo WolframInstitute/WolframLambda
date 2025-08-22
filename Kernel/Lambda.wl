@@ -37,8 +37,15 @@ BetaReduceList;
 BetaReduceSizes;
 EtaReduce;
 
+BetaReducePath;
+LambdaPathEvents;
+
 LambdaCombinator;
 CombinatorLambda;
+LambdaTags;
+BetaReduceTag;
+LambdaSingleWayCausalGraph;
+LambdaCausalGraph;
 
 LambdaApplication;
 LambdaRightApplication;
@@ -1106,6 +1113,52 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		]
 	]
 ]
+
+BetaReducePath[args__] := Flatten[Reap[BetaReduceSizes[args], "Positions"][[2]], 2]
+
+LambdaPathEvents[lambda_, args___] := With[{positions = BetaReducePath[lambda, args]},
+	If[	positions === {},
+		{},
+		Block[{taggedlambda = TagLambda[UntagLambda[lambda], "Alphabet"], lambdaPath},
+			lambdaPath = FoldList[MapAt[BetaSubstitute, #1, {#2}] &, taggedlambda, positions];
+			MapThread[Append[DirectedEdge @@ #1, #3 -> #2] &, {Partition[lambdaPath, 2, 1], positions, Range[Length[positions]]}]
+		]
+	]
+]
+
+LambdaTags[expr_] := Union @ Cases[expr, Interpretation["\[Lambda]", tag_] :> tag, All, Heads -> True]
+
+EventDestroyedCreatedTags[DirectedEdge[lam1_, lam2_, t_ -> pos_]] := With[{
+	tags1 = LambdaTags[Extract[lam1, {pos}][[1]]],
+	tags2 = LambdaTags[Extract[lam2, {pos}][[1]]]
+},
+	{Complement[tags1, tags2], Complement[tags2, tags1]}
+]
+
+LambdaSingleWayCausalGraph[events_List, opts___] := If[events === {}, Graph[{}, opts],
+	TransitiveReductionGraph[
+		EdgeDelete[
+			TransitiveClosureGraph @ Graph[events, DirectedEdge @@@ Partition[events, 2, 1]],
+			DirectedEdge[event1_, event2_] /; With[{
+				destroyed = EventDestroyedCreatedTags[event1][[2]],
+				created = EventDestroyedCreatedTags[event2][[1]]
+			}, AllTrue[created, x |-> AllTrue[destroyed, FreeQ[x, #] &]]]
+		]
+		,
+		opts,
+		VertexStyle -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "VertexStyle"],
+		VertexLabels -> DirectedEdge[lam1_, lam2_, t_ -> pos_]:> Row[{t, ":", Row[pos], ":", Extract[lam1, {pos}][[1, 0, 0, 2]]}],
+		EdgeStyle -> LightDarkSwitched[ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "EdgeStyle"], StandardRed],
+		VertexLabels -> Placed[Automatic, Tooltip],
+		GraphLayout -> "LayeredDigraphEmbedding"
+	]
+]
+
+LambdaCausalGraph[lambda_, t : _Integer | _UpTo : UpTo[Infinity], opts : OptionsPattern[]] := 
+	LambdaSingleWayCausalGraph[LambdaPathEvents[lambda, t], opts, VertexLabels -> None]
+
+
+BetaReduceTag[lambda_, tag_] := MapAt[BetaSubstitute, lambda, Position[lambda, Interpretation["\[Lambda]", tag][_][_]]]
 
 
 Options[BetaReduceStepPlot] = Join[

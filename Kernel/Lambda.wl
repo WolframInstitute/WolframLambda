@@ -145,9 +145,9 @@ EnumerateAffineLambdas[n_Integer ? Positive, limit_Integer : 1] := enumerateLamb
 
 EnumerateLinearLambdas[n_Integer ? Positive, limit_Integer : 1] := enumerateLambdas[limit, n]
 
-AffineLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] <= 1 &]
+AffineLambdaQ[lambda_, n_Integer : 1] := AllTrue[LambdaPositions[lambda], Length[#] <= n &]
 
-LinearLambdaQ[lambda_] := AllTrue[LambdaPositions[lambda], Length[#] == 1 &]
+LinearLambdaQ[lambda_, n_Integer : 1] := AllTrue[LambdaPositions[lambda], Length[#] == n &]
 
 
 EnumerateSizeLambdas[
@@ -354,19 +354,19 @@ BetaReduceList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinit
 
 Options[BetaReduceSizes] = Join[{"Function" -> LeafCount}, Options[BetaReduce]]
 
-BetaReduceSizes[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infinity, opts : OptionsPattern[]] := Block[{
+BetaReduceSizes[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := Block[{
 	subOpts = Sequence @@ FilterRules[{opts}, Options[BetaReducePositions]],
 	f = OptionValue["Function"],
 	limit = Replace[n, _[x_] :> x],
 	fixPointQ = MatchQ[n, _UpTo],
-	lambda = expr,
+	lambda = Sow[expr, "Lambda"],
 	sizes = {}, k
 },
 	For[k = 0, k < limit, k++,
 		AppendTo[sizes, f[lambda]];
-		pos = BetaReducePositions[lambda, 1, subOpts];
+		pos = Sow[BetaReducePositions[lambda, m, subOpts], "Positions"];
 		If[fixPointQ && pos === {}, Break[]];
-		lambda = MapAt[BetaSubstitute, lambda, pos];
+		lambda = Sow[MapAt[BetaSubstitute, lambda, pos], "Lambda"];
 	];
 	{lambda, sizes}
 ]
@@ -504,9 +504,13 @@ TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = Ta
 	]
 ]
 
-TagLambda[expr_, form_String : "Alphabet"] := expr /. lambda : $Lambda[_] :> TagLambda[lambda, form]
+TagLambda[expr_, "Minimal", symbols_] := expr /. lambda : $Lambda[_] :> TagLambda[lambda, symbols]
 
-ResourceFunction["AddCodeCompletion"]["TagLambda"][None, {"Alphabet", "Unique"}]
+TagLambda[expr_, form_String] := TagLambda[expr, "Minimal", Replace[form, "Minimal" -> "Alphabet"]]
+
+TagLambda[expr_] := TagLambda[expr, "Alphabet"]
+
+ResourceFunction["AddCodeCompletion"]["TagLambda"][None, {"Alphabet", "Unique", "Minimal"}]
 
 
 UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> $Lambda, Interpretation[x_, _] :> x,  l : $Lambda[_, _] :> FunctionLambda[l]}
@@ -531,8 +535,8 @@ $LambdaTreeColors = <|
    	"BrighterDebruijnIndex" -> Hue[0.52, 0.616, 0.961], 
    	"Application" -> GrayLevel[0.9, 1], 
    	"BrighterApplication" -> Hue[0.305, 0.795, 0.927], 
-   	"BlackLambda" -> $Black,
-   	"WhiteLambda" -> $White,
+   	"BlackLambda" -> Black,
+   	"WhiteLambda" -> White,
 	"Edges" -> GrayLevel[0.8, 1], 
    	"ApplicationBorder" -> GrayLevel[0.6, 1.], 
    	"VariableArgument" -> RGBColor[1., 0.88, 0.77], 
@@ -593,7 +597,8 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := With[{
 					{
 						TreeCases[$LambdaPattern] -> Replace["Lambda", colorRules],
 						"Leaves" -> Replace[If[variablesQ, "Variable", "Index"], colorRules],
-						TreeCases[Application] -> appColor
+						TreeCases[Application] -> appColor,
+						All -> StandardGray
 					}
 			],
   			TreeElementSize -> Switch[theme,
@@ -607,7 +612,7 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := With[{
 					MapThread[
 						#1 -> Graphics[#2, ImageSize -> 6] &, 
 						{
-							{TreeCases[Application], "NonLeaves", "Leaves"},
+							{TreeCases[Application], TreeCases[$LambdaPattern], "Leaves"},
 							{{appColor, Disk[{0, 0}]}, {lambdaColor, Rectangle[{0, 0}, {0.75, 1}]}, {leaveColor, Rectangle[{0, 0}, {0.75, 1}]}}
 						}
 					]
@@ -630,9 +635,9 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := With[{
 				"Minimal" | "MinimalColored",
 					All -> None,
 				_, {
-					"Leaves" -> If[variablesQ, Last, Identity],
-					TreeCases[Application] -> Automatic,
-					"NonLeaves" -> If[variablesQ, Function[Subscript["\[Lambda]", Last[#]]], Function["\[Lambda]"]]
+					TreeCases[$LambdaPattern] -> If[variablesQ, Function[Subscript["\[Lambda]", Replace[#, Interpretation[_, tag_] :> tag]]], Function["\[Lambda]"]],
+					"Leaves" -> If[variablesQ, Replace[Interpretation[_, tag_] :> tag], Identity],
+					TreeCases[Application] -> Automatic
 				}
 			]
 		]

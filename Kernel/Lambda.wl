@@ -70,6 +70,7 @@ UntagLambda;
 LambdaDepths;
 LambdaPositions;
 ColorizeLambda;
+UncolorizeLambda;
 LambdaSmiles;
 LambdaDiagram;
 
@@ -88,7 +89,7 @@ If[! ValueQ[$Lambda],
 	$Lambda = \[FormalLambda];
 ]
 
-$LambdaPattern = $Lambda | Interpretation["\[Lambda]", _]
+$LambdaPattern = $Lambda | Interpretation["\[Lambda]" | Style["\[Lambda]", ___], _]
 
 
 constructGroupings = Function[Groupings[#, Construct -> 2]]
@@ -232,6 +233,7 @@ RandomSizeLambda[size_Integer, n : _Integer | Automatic : Automatic] /; size > 1
 offsetFree[expr_, 0, ___] := expr
 offsetFree[(lambda : $LambdaPattern)[body_], offset_, depth_ : 0] := lambda[offsetFree[body, offset, depth + 1]]
 offsetFree[v : Interpretation[var_Integer, _], offset_, depth_ : 0] := ReplacePart[v, 1 -> offsetFree[var, offset, depth]]
+offsetFree[v : Interpretation[Style[var_Integer, style___], _], offset_, depth_ : 0] := ReplacePart[v, 1 -> Style[offsetFree[var, offset, depth], style]]
 offsetFree[fun_[x_], offset_, depth_ : 0] := offsetFree[fun, offset, depth][offsetFree[x, offset, depth]]
 offsetFree[var_Integer, offset_, depth_ : 0] := If[var > depth, var + offset, var]
 offsetFree[expr_, offset_, depth_ : 0] := expr
@@ -241,7 +243,7 @@ $betaSubstituteCounter
 
 (* perform a substitution of an argument into the body of a lambda, and also decrement the free parameters by one *)
 betaSubstitute[(lambda : $LambdaPattern)[body_], arg_, paramIdx_ : 1] := lambda[betaSubstitute[body, arg, paramIdx + 1]]
-betaSubstitute[v : Interpretation[var_Integer, tag_], arg_, paramIdx_ : 1] := Block[{index = <||>},
+betaSubstitute[v : Interpretation[var_Integer | Style[var_Integer, ___], tag_], arg_, paramIdx_ : 1] := Block[{index = <||>},
 	Which[
 		var < paramIdx, v,
 		var == paramIdx, offsetFree[arg, paramIdx - 1] /. {
@@ -380,6 +382,7 @@ LambdaSubstitute[expr_, vars_Association : <||>, offset_Integer : 0] :=
 			(lambda : $LambdaPattern)[body_] :> lambda[LambdaSubstitute[body, vars, offset + 1]],
 			(lambda : $LambdaPattern)[body_][arg_] :> lambda[LambdaSubstitute[body, vars, offset + 1]][LambdaSubstitute[arg, vars, offset]],
 			var_Integer | Interpretation[var_Integer, _] :> Lookup[vars, var - offset, var, offsetFree[#, offset] &],
+			(v : Style[var_Integer, style___]) | Interpretation[v : Style[var_Integer, style___], _] :> Lookup[vars, var - offset, v, offsetFree[#, offset] &],
 			f_[x_] :> LambdaSubstitute[f, vars, offset][LambdaSubstitute[x, vars, offset]]
 		}]
 	]
@@ -520,6 +523,9 @@ LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[ex
 
 
 FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
+	Style[($Lambda | Function), style___][Style[var_, ___], body_][x_] :> Interpretation[Style["\[Lambda]", style], var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
+	Style[($Lambda | Function), style___][Style[var_, ___], body_] :> Interpretation[Style["\[Lambda]", style], var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
+	(* Style[x_, style___] :> Style[FunctionLambda[Unevaluated[x], vars], style], *)
 	($Lambda | Function)[var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
 	($Lambda | Function)[var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
 	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
@@ -584,8 +590,8 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := With[{
 		leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules];
 		lambdaTree[
 			ColorizeLambda[taggedLambda, OptionValue[ColorFunction]] /.
-				Style[node : Interpretation[e_, tag_], style__] :>
-					(If[e === "\[Lambda]", AppendTo[colors, TreeCases[Interpretation[_, tag]] -> Directive[style]]]; node)
+				Interpretation[Style[e_, style__], tag_] :>
+					(If[e === "\[Lambda]", AppendTo[colors, TreeCases[Interpretation[_, tag]] -> Directive[style]]]; Interpretation[e, tag])
 			,
 			FilterRules[{opts}, Options[Tree]],
 			ParentEdgeStyle -> {All -> Replace["Edges", colorRules]},
@@ -673,7 +679,11 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[TagLamb
 
 LambdaApplication[lambda_, ___] := lambda //. (f : Except[$LambdaPattern])[x_] :> Application[f, x]
 
-LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {(l : Interpretation["\[Lambda]", tag_])[arg_] :> $Lambda[tag, arg], Interpretation[_Integer, tag_]:> tag}
+LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {
+	Interpretation["\[Lambda]", tag_][arg_] :> $Lambda[tag, arg],
+	Interpretation[Style["\[Lambda]", style___], tag_][arg_] :> Style[$Lambda, style][Style[tag, style], arg],
+	Interpretation[_Integer, tag_] :> tag
+}
 
 LambdaRightApplication[lambda_, sym_ : "@", ___] :=
 	lambda //. (x : Except[$LambdaPattern | Row])[y_] :> Row[{x, sym, y}] //.
@@ -785,12 +795,14 @@ BLCLambda[expr_] := BLCLambda[BinarySerialize[expr]]
 
 $DefaultColorFunction = Function[Darker[ColorData[96][#], .1]]
 
-ColorizeTaggedLambda[lambda_, colorFunction_ : $DefaultColorFunction] := With[{lambdas = Cases[lambda, Interpretation["\[Lambda]", x_], All, Heads -> True]},
-	lambda /. MapThread[x : #1 | ReplacePart[#1, 1 -> _Integer] :> Style[x, Bold, #2] &, {lambdas, colorFunction /@ Range[Length[lambdas]]}]
+ColorizeTaggedLambda[lambda_, colorFunction_ : $DefaultColorFunction] := With[{tags = Cases[lambda, Interpretation["\[Lambda]", tag_] :> HoldPattern[tag], All, Heads -> True]},
+	lambda /. MapThread[Interpretation[e_, tag : #1] :> Interpretation[Style[e, Bold, #2], tag] &, {tags, colorFunction /@ Range[Length[tags]]}]
 ]
 
 
 ColorizeLambda[expr_, args___] := ColorizeTaggedLambda[TagLambda[expr], args]
+
+UncolorizeLambda[expr_] := expr /. Style[e_, ___] :> e
 
 
 LambdaRow[Interpretation["\[Lambda]", tag_][body_], depth_ : 0] := {{$Lambda[HoldForm[tag]] -> depth, Splice[LambdaRow[body, depth + 1]]}}

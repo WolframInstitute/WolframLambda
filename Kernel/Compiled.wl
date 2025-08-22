@@ -255,7 +255,7 @@ offsetFreeIterative[expr_, offset_, depth0_] := Module[{
 		]
    	];
   	res["Pop"]
-  ]
+]
 
 betaSubstituteIterative[body_, arg_, paramIdx_] := Module[{
 	listHead = InertExpression[List],
@@ -321,7 +321,7 @@ betaSubstituteIterative[body_, arg_, paramIdx_] := Module[{
 		]
    	];
   	res["Pop"]
-  ]
+]
 
 betaReduceIterative[expr_] := Module[{
 	listHead = InertExpression[List],

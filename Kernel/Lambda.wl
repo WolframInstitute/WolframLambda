@@ -516,12 +516,40 @@ FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 }]
 
 
-$DefaultLambdaTreeColors = {"Lambda" -> $Red, "Application" -> $Blue, "Variable" -> $Green, "Labels" -> $White}
+$LambdaTreeColors = <|
+	"Lambda" -> Hue[0.8174603174603176, 0.20999999999999996`, 1.], 
+   	"BrighterLambda" -> Hue[0.833, 0.622, 0.9570000000000001], 
+   	"DebruijnIndex" -> Hue[0.576923076923077, 0.13, 1., 1.], 
+   	"DebruijnIndexBorder" -> RGBColor[0.276768, 0.66747216, 0.72075, 1], 
+   	"BrighterDebruijnIndex" -> Hue[0.52, 0.616, 0.961], 
+   	"Application" -> GrayLevel[0.9, 1], 
+   	"BrighterApplication" -> Hue[0.305, 0.795, 0.927], 
+   	"BlackLambda" -> $Black,
+   	"WhiteLambda" -> $White,
+	"Edges" -> GrayLevel[0.8, 1], 
+   	"ApplicationBorder" -> GrayLevel[0.6, 1.], 
+   	"VariableArgument" -> RGBColor[1., 0.88, 0.77], 
+   	"BrighterVariableArgument" -> RGBColor[1., 0.71, 0.06],
+	"Variable" -> $Green,
+	"Labels" -> $White
+|>
+
+$DefaultLambdaTreeColorRules = Join[
+	{
+		"Lambda" -> Directive[$LambdaTreeColors["Lambda"], EdgeForm[$LambdaTreeColors["BrighterLambda"]]],
+		"Application" -> Directive[$LambdaTreeColors["Application"], EdgeForm[$LambdaTreeColors["ApplicationBorder"]]],
+		"Index" -> Directive[$LambdaTreeColors["DebruijnIndex"], EdgeForm[$LambdaTreeColors["DebruijnIndexBorder"]]],
+		"Variable" -> Directive[$LambdaTreeColors["VariableArgument"], EdgeForm[Darker[$LambdaTreeColors["BrighterVariableArgument"], .1]]]
+	}
+	,
+	Normal[$LambdaTreeColors]
+]
 
 Options[LambdaTree] = Join[{
-	"Colored" -> False, "ApplicationLabel" -> None, "VariableLabels" -> False,
+	"ApplicationLabel" -> None, "VariableLabels" -> False,
 	ColorFunction -> $DefaultColorFunction,
-	ColorRules -> $DefaultLambdaTreeColors
+	ColorRules -> $DefaultLambdaTreeColorRules,
+	PlotTheme -> Automatic
 },
 	Options[Tree]
 ]
@@ -530,51 +558,81 @@ lambdaTree[(l : $LambdaPattern)[body_], opts___] := Tree[l, {lambdaTree[body]}, 
 lambdaTree[f_[x_], opts___] := Tree[Application, {lambdaTree[f], lambdaTree[x]}, opts]
 lambdaTree[expr_, opts___] := Tree[expr, None, opts]
 
+
 LambdaTree[lambda_, opts : OptionsPattern[]] := With[{
 	taggedLambda = TagLambda[lambda],
-	colored = OptionValue["Colored"],
-	colorRules = Join[Cases[Flatten[{OptionValue["ColorRules"]}], _Rule | _RuleDelayed], $DefaultLambdaTreeColors],
+	theme = OptionValue[PlotTheme],
+	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], $DefaultLambdaTreeColorRules],
 	appLabel = OptionValue["ApplicationLabel"],
 	variablesQ = TrueQ[OptionValue["VariableLabels"]]
 },
-	Block[{colors = {}, appColor = TreeCases[Application] -> Replace["Application", colorRules]},
+	
+	Block[{colors = {}, lambdaColor, appColor, leaveColor},
+		lambdaColor = Replace["Lambda", colorRules];
+		appColor = Replace["Application", colorRules];
+		leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules];
 		lambdaTree[
 			ColorizeLambda[taggedLambda, OptionValue[ColorFunction]] /.
 				Style[node : Interpretation[e_, tag_], style__] :>
 					(If[e === "\[Lambda]", AppendTo[colors, TreeCases[Interpretation[_, tag]] -> Directive[style]]]; node)
 			,
 			FilterRules[{opts}, Options[Tree]],
-			TreeElementLabelStyle -> If[MatchQ[colored, "Labels" | True],
-				colors,
-				{}
-			],
-			TreeElementStyle -> Switch[colored,
-				Automatic | "Elements",
-				Append[colors, appColor],
-				"Labels" | True,
-				{All -> Replace["Labels", colorRules]},
-				"Leaves",
-				{TreeCases[$LambdaPattern] -> Replace["Lambda", colorRules], "Leaves" -> Replace["Variable", colorRules], appColor},
+			ParentEdgeStyle -> {All -> Replace["Edges", colorRules]},
+			TreeElementLabelStyle -> All -> Replace["BlackLambda", colorRules],
+			TreeElementStyle -> Switch[theme,
+				"Colored" | "MinimalColored",
+					Append[colors, TreeCases[Application] -> appColor],
 				_,
-				{}
+					{
+						TreeCases[$LambdaPattern] -> Replace["Lambda", colorRules],
+						"Leaves" -> Replace[If[variablesQ, "Variable", "Index"], colorRules],
+						TreeCases[Application] -> appColor
+					}
 			],
-			TreeElementShapeFunction -> TreeCases[Application] -> If[appLabel === None, None, Automatic],
-			TreeElementLabelFunction -> {
-				"Leaves" -> If[variablesQ, Last, Identity],
-				TreeCases[Application] -> Function[appLabel],
-				"NonLeaves" -> If[variablesQ, Function[Subscript["\[Lambda]", Last[#]]], Function["\[Lambda]"]]
-			}
+  			TreeElementSize -> Switch[theme,
+				"Minimal" | "MinimalColored",
+					All -> .2,
+				_,
+					Automatic
+			],
+			TreeElementShape -> Switch[theme,
+				"Minimal",
+					MapThread[
+						#1 -> Graphics[#2, ImageSize -> 6] &, 
+						{
+							{TreeCases[Application], "NonLeaves", "Leaves"},
+							{{appColor, Disk[{0, 0}]}, {lambdaColor, Rectangle[{0, 0}, {0.75, 1}]}, {leaveColor, Rectangle[{0, 0}, {0.75, 1}]}}
+						}
+					]
+				,
+				"MinimalColored", {
+					TreeCases[Application] -> Graphics[{appColor, Disk[{0, 0}]}, ImageSize -> 6],
+					Splice @ MapAt[Graphics[{#[[2]], EdgeForm[Darker[#[[2]], .1]], Rectangle[{0, 0}, {0.75, 1}]}, ImageSize -> 6] &, colors, {All, 2}]
+				}
+				,
+				_,
+					Automatic
+			],
+			TreeElementLabel -> Switch[theme,
+				"Minimal" | "MinimalColored",
+					All -> None,
+				_,
+					TreeCases[Application] -> appLabel
+			],
+			TreeElementLabelFunction -> Switch[theme,
+				"Minimal" | "MinimalColored",
+					All -> None,
+				_, {
+					"Leaves" -> If[variablesQ, Last, Identity],
+					TreeCases[Application] -> Automatic,
+					"NonLeaves" -> If[variablesQ, Function[Subscript["\[Lambda]", Last[#]]], Function["\[Lambda]"]]
+				}
+			]
 		]
 ]
 ]
 
-LambdaMinimalTree[lambda_, opts___] := LambdaTree[lambda,
-	opts,
-	ImageSize -> {Automatic, UpTo[100]}, 
-   	TreeElementShapeFunction -> {TreeCases[Application] -> Function[Inset[Graphics[Disk[{0, 0}], ImageSize -> 4], #1]],  All -> None},
-	TreeElementLabel -> {TreeCases[_] -> None},
-	TreeElementLabelFunction -> {TreeCases[_] -> None}
-]
+LambdaMinimalTree[lambda_, opts___] := LambdaTree[lambda, opts, PlotTheme -> "Minimal", ImageSize -> {Automatic, UpTo[100]}]
 
 LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[TagLambda[UntagLambda[lambda], "Alphabet"], "VariableLabels" -> True]},
 	VertexReplace[
@@ -797,13 +855,14 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	{White, Black, Red, Green, Blue, LightYellow, Gray}
 ]
 
+
 $LambdaDiagramColorRules = {
-	"Lambda" -> $Red,
-	"LambdaApplication" -> $Green,
-	"Application" -> $Blue,
-	"Term" -> $Gray,
-	"Variable" | "FreeVariable" | "Constant" -> $Yellow,
-	_ -> Opacity[1]
+   	"Lambda" -> Directive[EdgeForm[Darker[$LambdaTreeColors["BrighterLambda"]]], $LambdaTreeColors["BrighterLambda"]],
+   	"LambdaApplication" -> Darker[$LambdaTreeColors["Application"], .1],
+   	"Application" -> Darker[$LambdaTreeColors["Application"]],
+   	"Term" -> $Gray,
+   	"Variable" | "FreeVariable" | "Constant" -> $LambdaTreeColors["BrighterVariableArgument"],
+   	_ -> Opacity[1]
 }
 
 Options[LambdaDiagram] = Join[{

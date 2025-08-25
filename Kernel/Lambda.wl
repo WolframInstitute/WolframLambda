@@ -542,7 +542,7 @@ FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 	($Lambda | Function)[var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
 	($Lambda | Function)[var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
 	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
-	var_Symbol :> Interpretation[Evaluate[Replace[var, vars]], var]
+	var : Except[$Lambda, _Symbol] :> Interpretation[Evaluate[Replace[var, vars]], var]
 }]
 
 
@@ -589,14 +589,16 @@ lambdaTree[f_[x_], opts___] := Tree[Application, {lambdaTree[f], lambdaTree[x]},
 lambdaTree[expr_, opts___] := Tree[expr, None, opts]
 
 
-LambdaTree[lambda_, opts : OptionsPattern[]] := With[{
-	taggedLambda = TagLambda[lambda],
+LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
+	taggedLambda,
 	theme = OptionValue[PlotTheme],
 	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], $DefaultLambdaTreeColorRules],
 	appLabel = OptionValue["ApplicationLabel"],
 	variablesQ = TrueQ[OptionValue["VariableLabels"]]
 },
-	
+	taggedLambda = FunctionLambda[lambda];
+	If[taggedLambda =!= lambda, variablesQ = True, taggedLambda = lambda];
+	taggedLambda = TagLambda[taggedLambda];
 	Block[{colors = {}, lambdaColor, appColor, leaveColor},
 		lambdaColor = Replace["Lambda", colorRules];
 		appColor = Replace["Application", colorRules];
@@ -1057,7 +1059,15 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		Function[{Replace[#2, colorRules], Point[#]}]
 	];
 	labelFunction = Switch[labeled,
-		True | All | Full | Automatic, With[{
+		True, 
+			Function[{line, pos, type},
+				Replace[{line, type}, {
+					{{{x1_, x2_}, y_}, "Lambda"} :> {Text["\[Lambda]", {x1 - 1/8, y}]},
+					{_, "Term" | "Application" | "LambdaApplication"} :> Nothing,
+					{{x_, {y1_, y2_}}, _} :> If[! alternative && y1 == y2, Nothing, Text[Extract[expr, {pos}][[1]], If[alternative && y1 == y2, {x, y1 - 1/8}, {x - 1/8, y1 - 1/2}]]]
+				}]
+			],
+		All | Full | Automatic, With[{
 			termRule = If[labeled === Automatic, {_, "Term"} -> Nothing, {{x_, {y1_, y2}}, "Term"} :> Text[Extract[expr, {pos}][[1]], {x - 1/8, y1 - 1/2}]]
 		},
 			Function[{line, pos, type},
@@ -1193,30 +1203,33 @@ BetaReduceTag[lambda_, tag_] := MapAt[BetaSubstitute, lambda, Position[lambda, I
 
 Options[BetaReduceStepPlot] = Join[
 	{
-		"Width" -> .4, "ShowInput" -> True, "ShowOutput" -> False, "ClipBounds" -> True,
+		"Width" -> .4, "ShowInput" -> True, "ShowOutput" -> False, "ClipBounds" -> True, "Termination" -> True,
 		ColorRules -> {"Input" -> StandardRed, "Output" -> StandardGreen}
 	},
 	Options[BetaReduceList],
 	Options[ListStepPlot]
 ];
 
-BetaReduceStepPlot[lambda_, n : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{
+BetaReduceStepPlot[lambda_, n : _Integer | _UpTo | Infinity : Infinity, opts : OptionsPattern[]] := Block[{
 	positions, path
 },
 	positions = Flatten[Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]], 2];
-	path = Take[path, Length[positions] + 1];
+	
 	BetaReduceStepPlot[path -> positions, opts]
 ]
 
-BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] := Block[{
+BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] /; Length[path] > Length[positions] := Block[{
 	width = OptionValue["Width"],
 	showInputQ = TrueQ[OptionValue["ShowInput"]],
 	showOutputQ = TrueQ[OptionValue["ShowOutput"]],
 	clipBoundsQ = TrueQ[OptionValue["ClipBounds"]],
+	terminationQ = TrueQ[OptionValue["Termination"]],
 	inputColor = Lookup[OptionValue[ColorRules], "Input"],
 	outputColor = Lookup[OptionValue[ColorRules], "Output"],
+	len = Length[positions] + 1,
 	columns
 },
+	truncatedPath = Take[path, len];
 	columns = Append[{LeafCount[Last[path]], {}}] @ MapThread[{src, tgt, pos, i} |-> With[{
 		srcTerm = Extract[src, {pos}][[1]],
 		tgtTerm = Extract[tgt, {pos}][[1]]
@@ -1267,19 +1280,23 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] := Bloc
 		}
 		],
 		{
-			Most[path],
-			Rest[path],
+			Most[truncatedPath],
+			Rest[truncatedPath],
 			positions,
 			Range[Length[positions]]
 		}
 	];
 	ListStepPlot[
-		columns[[All, 1]], Center,
+		If[ Length[path] > len,
+			{MapIndexed[Append[#2, #1] &, columns[[All, 1]]], MapIndexed[Append[#2 + len, #1] &, LeafCount /@ Drop[path, len]]},
+			columns[[All, 1]]
+		],
+		Center,
 		FilterRules[{opts}, Options[ListStepPlot]],
 		PlotRange -> {{If[clipBoundsQ && ! showInputQ, 1.5, .5], Length[path] + If[clipBoundsQ && ! showOutputQ, -.5, .5]}, {1, All}},
-		Filling -> Axis,
 		Epilog -> columns[[All, 2]],
-		PlotStyle -> Opacity[.4],
+		Filling -> {1 -> Axis},
+		PlotStyle -> StandardGray,
 		Frame -> True,
 		AspectRatio -> .4
 	]

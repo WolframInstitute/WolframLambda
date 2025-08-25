@@ -349,10 +349,23 @@ Options[BetaReduce] = Options[BetaReducePositions]
 BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := 
  	FixedPoint[MapAt[BetaSubstitute, #, Sow[BetaReducePositions[#, m, opts], "Positions"]] &, expr, n]
 
-Options[BetaReduceList] = Options[BetaReduce]
+Options[BetaReduceList] = Options[BetaReducePositions]
 
-BetaReduceList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] :=
-	FixedPointList[BetaReduce[#, 1, m, opts] &, expr, n]
+BetaReduceList[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := Block[{
+	subOpts = Sequence @@ FilterRules[{opts}, Options[BetaReducePositions]],
+	limit = Replace[n, _[x_] :> x],
+	fixPointQ = MatchQ[n, _UpTo],
+	lambda = expr,
+	lambdas = {expr},
+	k
+},
+	For[k = 0, k < limit, k++,
+		pos = Sow[BetaReducePositions[lambda, m, subOpts], "Positions"];
+		If[fixPointQ && pos === {}, Break[]];
+		AppendTo[lambdas, lambda = MapAt[BetaSubstitute, lambda, pos]];
+	];
+	lambdas
+]
 
 Options[BetaReduceSizes] = Join[{"Function" -> LeafCount}, Options[BetaReduce]]
 

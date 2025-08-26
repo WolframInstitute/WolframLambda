@@ -691,6 +691,67 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := With[{tree = LambdaTree[TagLamb
 ]
 
 
+TreeNodeCoordinates[tree_] := MapThread[
+	{#1, #2} -> #3 &, {
+		TreeExtract[tree, TreePosition[tree, _, TreeTraversalOrder -> "TopDown"], TreeData],
+    	TreePosition[tree, _, TreeTraversalOrder -> "TopDown"], 
+   		GraphEmbedding[Trees`TreeVisualizationGraph[tree]]
+	}
+]
+
+Options[LambdaLoopbackDiagram] = Join[Options[LambdaTree], Options[Graph]]
+
+LambdaLoopbackDiagram[lambda_, opts : OptionsPattern[]] := Block[{
+	tree = LambdaTree[lambda, FilterRules[{opts}, Options[LambdaTree]]],
+	variablesQ = TrueQ[OptionValue["VariableLabels"]],
+	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]],
+	lambdaColor, appColor, leaveColor
+},
+	If[FunctionLambda[lambda] =!= lambda, variablesQ = True];
+	lambdaColor = Replace["Lambda", colorRules];
+	appColor = Replace["Application", colorRules];
+	leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules];
+	EdgeAdd[
+		VertexReplace[Graph[tree], {l : $LambdaPattern, _} :> l],
+		DirectedEdge[#, ReplacePart[#[[1]], 1 -> "\[Lambda]"]] & /@ Thread[{TreeExtract[tree, #, TreeData], #}] & @ TreePosition[tree, _, "Leaves"],
+		FilterRules[{opts}, Options[Graph]],
+		VertexShape -> {
+			$LambdaPattern -> Graphics[{
+				lambdaColor,
+				Rectangle[{0, 0}, {0.75, 1}, RoundingRadius -> .25]},
+				ImageSize -> 6
+			],
+			{Application, _} -> Graphics[{
+				appColor,
+				Disk[]
+			}],
+			{_Interpretation, _} -> Graphics[{
+				leaveColor,
+				Rectangle[{0, 0}, {0.75, 1}]}
+			]
+		},
+		VertexLabels -> {
+			$LambdaPattern -> Placed["\[Lambda]", Center]
+		},
+		VertexStyle -> {{Application, _} -> appColor},
+		VertexSize -> {$LambdaPattern -> .4, {Application, _} -> .25, _ -> .3},
+		EdgeShapeFunction -> {
+			DirectedEdge[{_Interpretation ,_}, _] ->
+				({
+					Arrowheads[{{Medium, .9}}],
+					Arrow @ BSplineCurve[Insert[{First[#1], Last[#1]}, (Total @ {First[#1], Last[#1]}) / 2 + {If[#1[[1, 1]] > #1[[-1, 1]], 1, -1], 0}, 2]]
+				} &)
+		},
+		EdgeStyle -> {
+			_ -> Directive[Replace["Edges", colorRules], Thickness[.1 / VertexCount[tree]]],
+			DirectedEdge[{_Interpretation, _}, _] -> Directive[$Black, Dotted, Thick]
+		},
+		VertexCoordinates -> KeyMap[Replace[{l : Interpretation["\[Lambda]", _], _} :> l]] @ Association @ TreeNodeCoordinates[tree],
+		PerformanceGoal -> "Quality"
+	]
+]
+
+
 LambdaApplication[lambda_, ___] := lambda //. (f : Except[$LambdaPattern])[x_] :> Application[f, x]
 
 LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {

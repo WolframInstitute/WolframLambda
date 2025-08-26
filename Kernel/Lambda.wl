@@ -59,7 +59,7 @@ ClearAll[
 	LambdaTree,
 	LambdaMinimalTree,
 	LambdaGraph,
-	LambdaLoopbackDiagram,
+	LambdaLoopbackGraph,
 	BetaReduceStepPlot,
 
 	LambdaConvert,
@@ -702,9 +702,9 @@ TreeNodeCoordinates[tree_] := MapThread[
 	}
 ]
 
-Options[LambdaLoopbackDiagram] = Join[Options[LambdaTree], Options[Graph]]
+Options[LambdaLoopbackGraph] = Join[Options[LambdaTree], Options[Graph]]
 
-LambdaLoopbackDiagram[lambda_, opts : OptionsPattern[]] := Block[{
+LambdaLoopbackGraph[lambda_, opts : OptionsPattern[]] := Block[{
 	tree = LambdaTree[lambda, FilterRules[{opts}, Options[LambdaTree]]],
 	variablesQ = TrueQ[OptionValue["VariableLabels"]],
 	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]],
@@ -740,14 +740,11 @@ LambdaLoopbackDiagram[lambda_, opts : OptionsPattern[]] := Block[{
 		VertexSize -> {$LambdaPattern -> .4, {Application, _} -> .25, _ -> .3},
 		EdgeShapeFunction -> {
 			DirectedEdge[{_Interpretation ,_}, _] ->
-				({
-					Arrowheads[{{Medium, .9}}],
-					Arrow @ BSplineCurve[Insert[{First[#1], Last[#1]}, (Total @ {First[#1], Last[#1]}) / 2 + {If[#1[[1, 1]] > #1[[-1, 1]], 1, -1], 0}, 2]]
-				} &)
+				( BSplineCurve[Insert[{First[#1], Last[#1]}, (Total @ {First[#1], Last[#1]}) / 2 + {If[#1[[1, 1]] > #1[[-1, 1]], 1, -1], 0}, 2]] &)
 		},
 		EdgeStyle -> {
 			_ -> Directive[Replace["Edges", colorRules], Thickness[.1 / VertexCount[tree]]],
-			DirectedEdge[{_Interpretation, _}, _] -> Directive[$Black, Dotted, Thick]
+			DirectedEdge[{_Interpretation, _}, _] -> Directive[$Black, Dashing[Medium]]
 		},
 		VertexCoordinates -> KeyMap[Replace[{l : Interpretation["\[Lambda]", _], _} :> l]] @ Association @ TreeNodeCoordinates[tree],
 		PerformanceGoal -> "Quality"
@@ -894,7 +891,7 @@ LambdaRow[f_[x_], depth_ : 0] := Join[LambdaRow[f, depth], LambdaRow[x, depth]]
 LambdaRow[x_, ___] := {x}
 
 Options[LambdaSmiles] = Join[
-	{"Height" -> 3, "Spacing" -> 1, "StandardForm" -> False, "Arguments" -> False, "Arrow" -> False, "Tick" -> True, ColorFunction -> Automatic},
+	{"Height" -> 1, "Spacing" -> 1, "StandardForm" -> False, "Arguments" -> False, "Arrow" -> False, "Tick" -> True, ColorFunction -> Automatic},
 	Options[Style], Options[Graphics]
 ];
 LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
@@ -943,8 +940,8 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 				{
 					colors[#1[[2]]],
 					Arrowheads[Replace[OptionValue["Arrow"], {False | None -> 0, True | Automatic -> Small}]],
-					Arrow[Threaded[{spacing, sign}] * {{#2, 1}, {#2, 1 + dh / (l[[2]] + 1)}, {h[[1]], 1 + dh / (l[[2]] + 1)}, {h[[1]], 1}}],
-					If[argQ && tickQ, Line[Threaded[{spacing, sign}] * {{h[[1]] + 2, 1 + dh / (l[[2]] + 1)}, {h[[1]] + 2, 1.5}}], Nothing]
+					Arrow[Threaded[{spacing, sign}] * {{#2, height}, {#2, height + dh / (l[[2]] + 1)}, {h[[1]], height + dh / (l[[2]] + 1)}, {h[[1]], height}}],
+					If[argQ && tickQ, Line[Threaded[{spacing, sign}] * {{h[[1]] + 2, height + dh / (l[[2]] + 1)}, {h[[1]] + 2, 3 / 2 height}}], Nothing]
 				}
 			]
 		] &,
@@ -954,7 +951,8 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 		MapIndexed[Inset[Style[#1, styleOpts, FontSize -> 16], {spacing * #2[[1]], 0}] &, row],
 		arrows
 	},
-		FilterRules[{opts}, Options[Graphics]]
+		FilterRules[{opts}, Options[Graphics]],
+		AspectRatio -> height / (Length[row] * spacing)
 	]
 ]
 
@@ -965,11 +963,10 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 
 
 $LambdaDiagramColorRules = {
-   	"Lambda" -> Directive[EdgeForm[Darker[$LambdaTreeColors["BrighterLambda"]]], $LambdaTreeColors["BrighterLambda"]],
-   	"LambdaApplication" -> Darker[$LambdaTreeColors["Application"], .1],
-   	"Application" -> Darker[$LambdaTreeColors["Application"]],
+   	"Lambda" -> Replace["Lambda", $DefaultLambdaTreeColorRules],
+   	"Application" | "LambdaApplication" -> Replace["Application", $DefaultLambdaTreeColorRules],
    	"Term" -> $Gray,
-   	"Variable" | "FreeVariable" | "Constant" -> $LambdaTreeColors["BrighterVariableArgument"],
+   	"Variable" | "FreeVariable" | "Constant" -> Replace["Variable", $DefaultLambdaTreeColorRules],
    	_ -> Opacity[1]
 }
 
@@ -1107,7 +1104,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	With[{typeColorFunction =
 		If[ TrueQ[OptionValue["Colored"]],
 			Replace[colorRules],
-			Function[Nothing]
+			Function[$Gray]
 		]
 	},
 		lineFunction = If[TrueQ[OptionValue["Thick"]],
@@ -1125,7 +1122,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	];
 	pointFunction = If[TrueQ[OptionValue["Thick"]],
 		Function[{Replace[#2, colorRules], Disk[#1, 1 / 4]}],
-		Function[{Replace[#2, colorRules], Point[#]}]
+		Function[{Replace[#2, colorRules], Disk[#1, 1 / 8]}]
 	];
 	labelFunction = Switch[labeled,
 		True, 
@@ -1164,12 +1161,10 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	dots = Switch[OptionValue["Dots"],
 		All,
 		{
-			PointSize[Large],
 			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> type_] :> Tooltip[pointFunction[{x, y}, type], makeTooltip[pos, type]]]
 		},
 		True | Automatic,
 		{
-			PointSize[Large],
 			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> Tooltip[pointFunction[{x, y}, "Lambda"], makeTooltip[pos, "Lambda"]]]
 		},
 		False | None,
@@ -1272,7 +1267,7 @@ BetaReduceTag[lambda_, tag_] := MapAt[BetaSubstitute, lambda, Position[lambda, I
 
 Options[BetaReduceStepPlot] = Join[
 	{
-		"Width" -> .4, "ShowInput" -> True, "ShowOutput" -> False, "ClipBounds" -> True, "Termination" -> True,
+		"Width" -> .4, "ShowInput" -> True, "ShowOutput" -> False, "ClipBounds" -> True, "TerminationLine" -> False,
 		ColorRules -> {"Input" -> StandardRed, "Output" -> StandardGreen}
 	},
 	Options[BetaReduceList],
@@ -1292,7 +1287,7 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] /; Leng
 	showInputQ = TrueQ[OptionValue["ShowInput"]],
 	showOutputQ = TrueQ[OptionValue["ShowOutput"]],
 	clipBoundsQ = TrueQ[OptionValue["ClipBounds"]],
-	terminationQ = TrueQ[OptionValue["Termination"]],
+	terminationQ = TrueQ[OptionValue["TerminationLine"]],
 	inputColor = Lookup[OptionValue[ColorRules], "Input"],
 	outputColor = Lookup[OptionValue[ColorRules], "Output"],
 	len = Length[positions] + 1,
@@ -1356,16 +1351,17 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] /; Leng
 		}
 	];
 	ListStepPlot[
-		If[ Length[path] > len,
+		If[ terminationQ && Length[path] > len,
 			{MapIndexed[Append[#2, #1] &, columns[[All, 1]]], MapIndexed[Append[#2 + len, #1] &, LeafCount /@ Drop[path, len]]},
 			columns[[All, 1]]
 		],
 		Center,
 		FilterRules[{opts}, Options[ListStepPlot]],
-		PlotRange -> {{If[clipBoundsQ && ! showInputQ, 1.5, .5], Length[path] + If[clipBoundsQ && ! showOutputQ, -.5, .5]}, {1, All}},
+		PlotRange -> {{If[clipBoundsQ && ! showInputQ, 1.5, .5], Length[path] + If[clipBoundsQ && ! showOutputQ, -.66, .5]}, {1, All}},
+		PlotRangePadding -> {{0, 0}, {0, Scaled[.1]}},
 		Epilog -> columns[[All, 2]],
 		Filling -> {1 -> Axis},
-		PlotStyle -> StandardGray,
+		PlotStyle -> RGBColor[0.24, 0.6, 0.8],
 		Frame -> True,
 		AspectRatio -> .4
 	]

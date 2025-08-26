@@ -597,14 +597,13 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 	variablesQ = TrueQ[OptionValue["VariableLabels"]]
 },
 	taggedLambda = FunctionLambda[lambda];
-	If[taggedLambda =!= lambda, variablesQ = True, taggedLambda = lambda];
-	taggedLambda = TagLambda[taggedLambda];
+	If[taggedLambda =!= lambda, variablesQ = True, taggedLambda = TagLambda[taggedLambda]];
 	Block[{colors = {}, lambdaColor, appColor, leaveColor},
 		lambdaColor = Replace["Lambda", colorRules];
 		appColor = Replace["Application", colorRules];
 		leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules];
 		lambdaTree[
-			ColorizeLambda[taggedLambda, OptionValue[ColorFunction]] /.
+			ColorizeLambda[taggedLambda, FilterRules[{opts}, Options[ColorizeLambda]]] /.
 				Interpretation[Style[e_, style__], tag_] :>
 					(If[e === "\[Lambda]", AppendTo[colors, TreeCases[Interpretation[_, tag]] -> Directive[style]]]; Interpretation[e, tag])
 			,
@@ -617,7 +616,7 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 				_,
 					{
 						TreeCases[$LambdaPattern] -> Replace["Lambda", colorRules],
-						"Leaves" -> Replace[If[variablesQ, "Variable", "Index"], colorRules],
+						"Leaves" -> leaveColor,
 						TreeCases[Application] -> appColor,
 						All -> StandardGray
 					}
@@ -810,10 +809,14 @@ BLCLambda[expr_] := BLCLambda[BinarySerialize[expr]]
 
 $DefaultColorFunction = Function[Darker[ColorData[96][#], .1]]
 
-ColorizeTaggedLambda[lambda_, colorFunction_ : $DefaultColorFunction] := With[{tags = Cases[lambda, Interpretation["\[Lambda]", tag_] :> HoldPattern[tag], All, Heads -> True]},
+Options[ColorizeLambda] = Options[ColorizeTaggedLambda] = {ColorFunction -> $DefaultColorFunction}
+
+ColorizeTaggedLambda[lambda_, OptionsPattern[]] := With[{
+	tags = Cases[lambda, Interpretation["\[Lambda]", tag_] :> HoldPattern[tag], All, Heads -> True],
+	colorFunction = OptionValue[ColorFunction]
+},
 	lambda /. MapThread[Interpretation[e_, tag : #1] :> Interpretation[Style[e, Bold, #2], tag] &, {tags, colorFunction /@ Range[Length[tags]]}]
 ]
-
 
 ColorizeLambda[expr_, args___] := ColorizeTaggedLambda[TagLambda[expr], args]
 

@@ -10,74 +10,77 @@ BeginPackage["Wolfram`Lambda`"];
 (* ::Text:: *)
 (*Declare your public symbols here:*)
 
-$Lambda;
-ClosedLambdaQ;
-RandomLambda;
-RandomSizeLambda;
-EnumerateLambdas;
-EnumerateAffineLambdas;
-EnumerateLinearLambdas;
-AffineLambdaQ;
-LinearLambdaQ;
-EnumerateSizeLambdas;
-LambdaSize;
+ClearAll[
+	$Lambda,
+	ClosedLambdaQ,
+	RandomLambda,
+	RandomSizeLambda,
+	EnumerateLambdas,
+	EnumerateAffineLambdas,
+	EnumerateLinearLambdas,
+	AffineLambdaQ,
+	LinearLambdaQ,
+	EnumerateSizeLambdas,
+	LambdaSize,
 
-LambdaSubstitute;
-EvalLambda;
-LambdaFreeVariables;
+	LambdaSubstitute,
+	EvalLambda,
+	LambdaFreeVariables,
 
-ApplicativePosition;
-BetaSubstitute;
-BetaReducePositions;
-BetaNormalQ;
-BetaReductions;
-BetaPositionReductions;
-BetaReduce;
-BetaReduceList;
-BetaReduceSizes;
-EtaReduce;
+	ApplicativePosition,
+	BetaSubstitute,
+	BetaReducePositions,
+	BetaNormalQ,
+	BetaReductions,
+	BetaPositionReductions,
+	BetaReduce,
+	BetaReduceList,
+	BetaReduceSizes,
+	EtaReduce,
 
-BetaReducePath;
-LambdaPathEvents;
+	BetaReducePath,
+	LambdaPathEvents,
 
-LambdaCombinator;
-CombinatorLambda;
-LambdaTags;
-BetaReduceTag;
-LambdaSingleWayCausalGraph;
-LambdaCausalGraph;
+	LambdaCombinator,
+	CombinatorLambda,
+	LambdaTags,
+	BetaReduceTag,
+	LambdaSingleWayCausalGraph,
+	LambdaCausalGraph,
 
-LambdaApplication;
-LambdaRightApplication;
-LambdaVariableForm;
-LambdaBrackets;
-LambdaString;
+	LambdaApplication,
+	LambdaRightApplication,
+	LambdaVariableForm,
+	LambdaBrackets,
+	LambdaString,
 
-LambdaFunction;
-FunctionLambda;
-LambdaTree;
-LambdaMinimalTree;
-LambdaGraph;
-BetaReduceStepPlot;
+	LambdaFunction,
+	FunctionLambda,
+	LambdaTree,
+	LambdaMinimalTree,
+	LambdaGraph,
+	LambdaLoopbackDiagram,
+	BetaReduceStepPlot,
 
-LambdaConvert;
-ParseLambda;
-LambdaBLC;
-BLCLambda;
+	LambdaConvert,
+	ParseLambda,
+	LambdaBLC,
+	BLCLambda,
 
-TagLambda;
-UntagLambda;
-LambdaDepths;
-LambdaPositions;
-ColorizeLambda;
-UncolorizeLambda;
-LambdaSmiles;
-LambdaDiagram;
+	TagLambda,
+	UntagLambda,
+	LambdaDepths,
+	LambdaPositions,
+	ColorizeLambda,
+	UncolorizeLambda,
+	LambdaSmiles,
+	LambdaDiagram,
 
-ChurchNumeral;
-FromChurchNumeral;
-ChurchNumeralQ;
-$LambdaBusyBeavers;
+	ChurchNumeral,
+	FromChurchNumeral,
+	ChurchNumeralQ,
+	$LambdaBusyBeavers
+]
 
 
 Begin["`Private`"];

@@ -1,10 +1,12 @@
 
 BeginPackage["Wolfram`Lambda`Compiled`"]
 
-BetaReduceCompiled
-BetaReduceListCompiled
-BetaReduceSizesCompiled
-$CompiledFunctions
+ClearAll[
+	BetaReduceCompiled,
+	BetaReduceListCompiled,
+	BetaReduceSizesCompiled,
+	$CompiledFunctions
+]
 
 
 Begin["`Private`"]

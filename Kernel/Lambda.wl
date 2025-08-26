@@ -249,12 +249,11 @@ betaSubstitute[(lambda : $LambdaPattern)[body_], arg_, paramIdx_ : 1] := lambda[
 betaSubstitute[v : Interpretation[var_Integer | Style[var_Integer, ___], tag_], arg_, paramIdx_ : 1] := Block[{index = <||>},
 	Which[
 		var < paramIdx, v,
-		var == paramIdx, offsetFree[arg, paramIdx - 1] /. {
-			Interpretation["\[Lambda]", subTag_][body_] :> With[{i = Lookup[$betaSubstituteCounter, subTag, $betaSubstituteCounter[subTag] = 0]},
+		var == paramIdx, offsetFree[arg, paramIdx - 1] //.
+			Interpretation["\[Lambda]", subTag : Except[tag -> _]][body_] :> With[{i = Lookup[$betaSubstituteCounter, subTag, $betaSubstituteCounter[subTag] = 0]},
 				$betaSubstituteCounter[subTag]++;
 				Interpretation["\[Lambda]", tag -> Subscript[subTag, i]][body /. Interpretation[e_, subTag] :> Interpretation[e, tag -> Subscript[subTag, i]]]
-			]
-		},
+			],
 		var > paramIdx, ReplacePart[v, 1 -> var - 1]
 	]
 ]
@@ -1259,7 +1258,11 @@ LambdaSingleWayCausalGraph[events_List, opts___] := If[events === {}, Graph[{}, 
 ]
 
 LambdaCausalGraph[lambda_, t : _Integer | _UpTo : UpTo[Infinity], opts : OptionsPattern[]] := 
-	LambdaSingleWayCausalGraph[LambdaPathEvents[lambda, t], opts, VertexLabels -> None]
+	VertexReplace[
+		LambdaSingleWayCausalGraph[LambdaPathEvents[lambda, t], opts],
+		DirectedEdge[from_, to_, tag_] :> DirectedEdge[UntagLambda[from], UntagLambda[to], tag],
+		VertexLabels -> None
+	]
 
 
 BetaReduceTag[lambda_, tag_] := MapAt[BetaSubstitute, lambda, Position[lambda, Interpretation["\[Lambda]", tag][_][_]]]

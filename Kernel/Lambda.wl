@@ -827,7 +827,7 @@ LambdaRow[f_[x_], depth_ : 0] := Join[LambdaRow[f, depth], LambdaRow[x, depth]]
 LambdaRow[x_, ___] := {x}
 
 Options[LambdaSmiles] = Join[
-	{"Height" -> 3, "Spacing" -> 1, "StandardForm" -> False, "Arguments" -> False, "Arrow" -> False, ColorFunction -> $DefaultColorFunction},
+	{"Height" -> 3, "Spacing" -> 1, "StandardForm" -> False, "Arguments" -> False, "Arrow" -> False, "Tick" -> True, ColorFunction -> Automatic},
 	Options[Style], Options[Graphics]
 ];
 LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
@@ -835,7 +835,8 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	lambdaPos, varPos, argPos, lambdas, maxDepth, vars, args, colors, arrows,
 	height = OptionValue["Height"], spacing = OptionValue["Spacing"],
 	argQ = TrueQ[OptionValue["Arguments"]],
-	colorFunction = OptionValue[ColorFunction],
+	tickQ = TrueQ[OptionValue["Tick"]],
+	colorFunction = Replace[OptionValue[ColorFunction], Automatic -> (StandardGray &)],
 	styleOpts = FilterRules[{opts}, Options[Style]]
 },
 	row = FixedPoint[
@@ -875,7 +876,8 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 				{
 					colors[#1[[2]]],
 					Arrowheads[Replace[OptionValue["Arrow"], {False | None -> 0, True | Automatic -> Small}]],
-					Arrow[Threaded[{spacing, sign}] * {{#2, 1}, {#2, 1 + dh / (l[[2]] + 1)}, {h[[1]], 1 + dh / (l[[2]] + 1)}, {h[[1]], 1}}]
+					Arrow[Threaded[{spacing, sign}] * {{#2, 1}, {#2, 1 + dh / (l[[2]] + 1)}, {h[[1]], 1 + dh / (l[[2]] + 1)}, {h[[1]], 1}}],
+					If[argQ && tickQ, Line[Threaded[{spacing, sign}] * {{h[[1]] + 2, 1 + dh / (l[[2]] + 1)}, {h[[1]] + 2, 1.5}}], Nothing]
 				}
 			]
 		] &,

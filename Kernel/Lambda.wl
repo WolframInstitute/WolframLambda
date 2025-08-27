@@ -361,10 +361,13 @@ BetaReduceList[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infi
 	lambdas = {expr},
 	k
 },
-	For[k = 0, k < limit, k++,
-		pos = Sow[BetaReducePositions[lambda, m, subOpts], "Positions"];
-		If[fixPointQ && pos === {}, Break[]];
-		AppendTo[lambdas, lambda = MapAt[BetaSubstitute, lambda, pos]];
+	Progress`EvaluateWithProgress[
+		For[k = 0, k < limit, k++,
+			pos = Sow[BetaReducePositions[lambda, m, subOpts], "Positions"];
+			If[fixPointQ && pos === {}, Break[]];
+			AppendTo[lambdas, lambda = MapAt[BetaSubstitute, lambda, pos]];
+		],
+		<|"Text" -> "Reducing lambda expression", "Progress" :> k / limit, "Percentage" :> k / limit, "ElapsedTime" -> Automatic, "RemainingTime" -> Automatic|>
 	];
 	lambdas
 ]

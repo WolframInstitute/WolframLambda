@@ -627,7 +627,7 @@ $CompiledFunctions := $CompiledFunctions = Enclose[
                 InertExpression[List][curExpr, sizes["Elements"]]
             ]
         ]
-	|>, TargetSystem -> All] &
+	|>, TargetSystem -> Automatic] &
 ]
 
 $ReduceFunction = "BetaReduce" | "BetaReduceInner" | "BetaReduceApplicative" | "BetaReduceIterative" | "BetaReduceInnerIterative" | "BetaReduceApplicativeIterative"

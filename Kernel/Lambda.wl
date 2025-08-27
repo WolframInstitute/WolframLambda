@@ -1282,15 +1282,15 @@ Options[BetaReduceStepPlot] = Join[
 	Options[ListStepPlot]
 ];
 
-BetaReduceStepPlot[lambda_, n : _Integer | _UpTo | Infinity : Infinity, opts : OptionsPattern[]] := Block[{
+BetaReduceStepPlot[lambda_, n : _Integer | _UpTo | Infinity : Infinity, step : Right | Left | Center : Center, opts : OptionsPattern[]] := Block[{
 	positions, path
 },
 	positions = Flatten[Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]], 2];
 	
-	BetaReduceStepPlot[path -> positions, opts]
+	BetaReduceStepPlot[path -> positions, step, opts]
 ]
 
-BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] /; Length[path] > Length[positions] := Block[{
+BetaReduceStepPlot[path_List -> positions_List, step : Right | Left | Center : Center, opts : OptionsPattern[]] /; Length[path] > Length[positions] := Block[{
 	width = OptionValue["Width"],
 	showInputQ = TrueQ[OptionValue["ShowInput"]],
 	showOutputQ = TrueQ[OptionValue["ShowOutput"]],
@@ -1366,7 +1366,7 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] /; Leng
 			{MapIndexed[Append[#2, #1] &, columns[[All, 1]]], MapIndexed[Append[#2 + len, #1] &, LeafCount /@ Drop[path, len]]},
 			columns[[All, 1]]
 		],
-		Center,
+		step,
 		FilterRules[{opts}, Options[ListStepPlot]],
 		PlotRange -> {{If[clipBoundsQ && ! showInputQ, 1.5, .5], Length[path] + If[clipBoundsQ && ! showOutputQ, -.66, .5]}, {1, All}},
 		PlotRangePadding -> {{0, 0}, {0, Scaled[.1]}},

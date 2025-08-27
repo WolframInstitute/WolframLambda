@@ -562,7 +562,7 @@ $LambdaTreeColors = <|
    	"BrighterApplication" -> Hue[0.305, 0.795, 0.927], 
    	"BlackLambda" -> Black,
    	"WhiteLambda" -> White,
-	"Edges" -> GrayLevel[0.8, 1], 
+	"Edges" -> RGBColor[0.133333, 0.101961, 0.101961], 
    	"ApplicationBorder" -> GrayLevel[0.6, 1.], 
    	"VariableArgument" -> RGBColor[1., 0.88, 0.77], 
    	"BrighterVariableArgument" -> RGBColor[1., 0.71, 0.06],
@@ -582,7 +582,7 @@ $DefaultLambdaTreeColorRules = Join[
 ]
 
 Options[LambdaTree] = Join[{
-	"ApplicationLabel" -> None, "VariableLabels" -> False,
+	"ApplicationLabel" -> None, "VariableLabels" -> False, "HighlightRedex" -> False,
 	ColorFunction -> $DefaultColorFunction,
 	ColorRules -> $DefaultLambdaTreeColorRules,
 	PlotTheme -> Automatic
@@ -600,15 +600,16 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 	theme = OptionValue[PlotTheme],
 	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], $DefaultLambdaTreeColorRules],
 	appLabel = OptionValue["ApplicationLabel"],
-	variablesQ = TrueQ[OptionValue["VariableLabels"]]
+	variablesQ = TrueQ[OptionValue["VariableLabels"]],
+	highlightRedex = Replace[OptionValue["HighlightRedex"], Automatic | True -> StandardRed]
 },
 	taggedLambda = FunctionLambda[lambda];
 	If[taggedLambda =!= lambda, variablesQ = True, taggedLambda = TagLambda[taggedLambda]];
-	Block[{colors = {}, lambdaColor, appColor, leaveColor},
+	Block[{tree, colors = {}, lambdaColor, appColor, leaveColor, applicationPositions, redexPositions},
 		lambdaColor = Replace["Lambda", colorRules];
 		appColor = Replace["Application", colorRules];
 		leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules];
-		lambdaTree[
+		tree = lambdaTree[
 			ColorizeLambda[taggedLambda, FilterRules[{opts}, Options[ColorizeLambda]]] /.
 				Interpretation[Style[e_, style__], tag_] :>
 					(If[e === "\[Lambda]", AppendTo[colors, TreeCases[Interpretation[_, tag]] -> Directive[style]]]; Interpretation[e, tag])
@@ -616,36 +617,25 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 			FilterRules[{opts}, Options[Tree]],
 			ParentEdgeStyle -> {All -> Replace["Edges", colorRules]},
 			TreeElementLabelStyle -> All -> Replace["BlackLambda", colorRules],
-			TreeElementStyle -> Switch[theme,
-				"Colored" | "MinimalColored",
-					Append[colors, TreeCases[Application] -> appColor],
-				_,
-					{
-						TreeCases[$LambdaPattern] -> Replace["Lambda", colorRules],
-						"Leaves" -> leaveColor,
-						TreeCases[Application] -> appColor,
-						All -> StandardGray
-					}
-			],
+			
   			TreeElementSize -> Switch[theme,
 				"Minimal" | "MinimalColored",
-					All -> .2,
+					All -> {"Scaled", .015},
 				_,
-					Automatic
+					All -> Large
 			],
 			TreeElementShape -> Switch[theme,
 				"Minimal",
 					MapThread[
-						#1 -> Graphics[#2, ImageSize -> 6] &, 
+						#1 -> Graphics[{#2, Rectangle[{0, 0}, {0.75, 1}]}] &, 
 						{
-							{TreeCases[Application], TreeCases[$LambdaPattern], "Leaves"},
-							{{appColor, Disk[{0, 0}]}, {lambdaColor, Rectangle[{0, 0}, {0.75, 1}]}, {leaveColor, Rectangle[{0, 0}, {0.75, 1}]}}
+							{TreeCases[$LambdaPattern], "Leaves"},
+							{lambdaColor, leaveColor}
 						}
 					]
 				,
 				"MinimalColored", {
-					TreeCases[Application] -> Graphics[{appColor, Disk[{0, 0}]}, ImageSize -> 6],
-					Splice @ MapAt[Graphics[{#[[2]], EdgeForm[Darker[#[[2]], .1]], Rectangle[{0, 0}, {0.75, 1}]}, ImageSize -> 6] &, colors, {All, 2}]
+					Splice @ MapAt[Graphics[{#[[2]], EdgeForm[Darker[#[[2]], .1]], Rectangle[{0, 0}, {0.75, 1}]}] &, colors, {All, 2}]
 				}
 				,
 				_,
@@ -666,8 +656,42 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 					TreeCases[Application] -> Automatic
 				}
 			]
+		];
+		applicationPositions = TreePosition[tree, Application, All];
+		redexPositions = If[ ! MatchQ[highlightRedex, None | False],
+			Catenate @ Reap[
+				TreeScan[
+					Replace[{#1, #2}, {Application, {$LambdaPattern, _}} :> Sow[#3]] &,
+					tree,
+					All -> {"Data", "OriginalChildrenData", "Position"}
+				]
+			][[2]],
+			{}
+		];
+		applicationPositions = Complement[applicationPositions, redexPositions];
+		Tree[
+			tree,
+			TreeElementStyle ->
+				Join[
+					Thread[applicationPositions -> appColor],
+					Thread[redexPositions -> highlightRedex],
+					Switch[theme,
+						"Colored" | "MinimalColored",
+							colors,
+						_,
+							{
+								TreeCases[$LambdaPattern] -> Replace["Lambda", colorRules],
+								"Leaves" -> leaveColor
+							}
+					]
+				]
+				,
+			TreeElementShape -> Join[
+				Thread[redexPositions -> Graphics[{highlightRedex, Disk[]}]],
+				Thread[applicationPositions -> Graphics[{appColor, Disk[]}]]
+			]
 		]
-]
+	]
 ]
 
 LambdaMinimalTree[lambda_, opts___] := LambdaTree[lambda, opts, PlotTheme -> "Minimal", ImageSize -> {Automatic, UpTo[100]}]
@@ -1387,7 +1411,7 @@ NestWhilePairList[f_, expr_, test_, m_Integer : 1, max : _Integer | Infinity : I
 			If[i >= max || Length[args] == m && ! ConfirmBy[test @@ args, BooleanQ], Break[]];
 			Replace[f @@ args,
 			{
-				pair : {_, next_} :> (AppendTo[list, g[pair]]; If[i++ >= m, args = Rest[args]]; args = Take[Append[args, next], UpTo[m]];),
+				pair : {_, next_} :> (AppendTo[list, g[pair]]; If[i++ >= m, args = Rest[args]]; args = Append[args, next];),
 				_ :> Break[]
 			}];
 		];

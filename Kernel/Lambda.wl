@@ -1272,6 +1272,7 @@ BetaReduceTag[lambda_, tag_] := MapAt[BetaSubstitute, lambda, Position[lambda, I
 Options[BetaReduceStepPlot] = Join[
 	{
 		"Width" -> .4, "ShowInput" -> True, "ShowOutput" -> False, "ClipBounds" -> True, "TerminationLine" -> False,
+		"Tooltips" -> False,
 		ColorRules -> {"Input" -> StandardRed, "Output" -> StandardGreen}
 	},
 	Options[BetaReduceList],
@@ -1294,9 +1295,12 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] /; Leng
 	terminationQ = TrueQ[OptionValue["TerminationLine"]],
 	inputColor = Lookup[OptionValue[ColorRules], "Input"],
 	outputColor = Lookup[OptionValue[ColorRules], "Output"],
+	tooltip = Replace[OptionValue["Tooltips"], {False | None -> (#1 &), _ -> Tooltip}],
 	len = Length[positions] + 1,
+	xfn, yfn,
 	columns
 },
+	{xfn, yfn} = Visualization`Utilities`ParseScalingFunctions[OptionValue["ScalingFunctions"], 2, ListStepPlot][[All, 1]];
 	truncatedPath = Take[path, len];
 	columns = Append[{LeafCount[Last[path]], {}}] @ MapThread[{src, tgt, pos, i} |-> With[{
 		srcTerm = Extract[src, {pos}][[1]],
@@ -1314,13 +1318,13 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] /; Leng
 				If[	showInputQ,
 					{
 						inputColor,
-						Tooltip[
+						tooltip[
 							Rectangle @@ Thread[{
-								If[ showOutputQ,
+								xfn @ If[ showOutputQ,
 									{i + .25 - width / 2, i + .25 + width / 2},
 									{i - width / 2, i + width / 2}
 								],
-								Catenate[Lookup[PositionIndex[srcPos], srcSubPos]]
+								yfn @ Catenate[Lookup[PositionIndex[srcPos], srcSubPos]]
 							}],
 							srcTerm
 						]
@@ -1331,13 +1335,13 @@ BetaReduceStepPlot[path_List -> positions_List, opts : OptionsPattern[]] /; Leng
 				If[ showOutputQ,
 					{
 						outputColor,
-						Tooltip[
+						tooltip[
 							Rectangle @@ Thread[{
-								If[	showInputQ,
+								xfn @ If[	showInputQ,
 									{i + .75 - width / 2, i + .75 + width / 2},
 									{i + 1 - width / 2, i + 1 + width / 2}
 								],
-								Catenate[Lookup[PositionIndex[tgtPos], tgtSubPos]]
+								yfn @ Catenate[Lookup[PositionIndex[tgtPos], tgtSubPos]]
 							}],
 							srcTerm
 						]

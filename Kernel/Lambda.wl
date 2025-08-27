@@ -60,6 +60,7 @@ ClearAll[
 	LambdaMinimalTree,
 	LambdaGraph,
 	LambdaLoopbackGraph,
+	LambdaMultiwayGraph,
 	BetaReduceStepPlot,
 
 	LambdaConvert,
@@ -1375,6 +1376,57 @@ BetaReduceStepPlot[path_List -> positions_List, step : Right | Left | Center : C
 		PlotStyle -> RGBColor[0.24, 0.6, 0.8],
 		Frame -> True,
 		AspectRatio -> .4
+	]
+]
+
+
+
+NestWhilePairList[f_, expr_, test_, m_Integer : 1, max : _Integer | Infinity : Infinity, g_ : First] := 
+	Enclose @ Block[{list = {}, args = {expr}, i = 0},
+		While[True,
+			If[i >= max || Length[args] == m && ! ConfirmBy[test @@ args, BooleanQ], Break[]];
+			Replace[f @@ args,
+			{
+				pair : {_, next_} :> (AppendTo[list, g[pair]]; If[i++ >= m, args = Rest[args]]; args = Take[Append[args, next], UpTo[m]];),
+				_ :> Break[]
+			}];
+		];
+		list
+	]
+
+Options[LambdaMultiwayGraph] = Join[{
+    "Highlight" -> None
+},
+	Options[BetaReducePositions],
+	Options[Graph]
+]
+
+LambdaMultiwayGraph[lambda_, t_, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{
+	g = ResourceFunction["NestGraphTagged"][
+		With[{reduceOptions = FilterRules[{opts}, Options[BetaReducePositions]]},
+			expr |-> AssociationMap[MapAt[BetaSubstitute, expr, {#}] &, BetaReducePositions[expr, m, reduceOptions]]
+		],
+		lambda, t,
+		FilterRules[{opts}, Options[ResourceFunction["NestGraphTagged"]]],
+		"RuleStyling" -> False,
+		VertexShapeFunction -> ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"],
+		EdgeStyle -> _ -> Hue[0.6, 0.7, 0.7],
+		VertexSize -> {x_ :> .1 Sqrt[LeafCount[x]]},
+		GraphLayout -> "LayeredDigraphEmbedding",
+		PerformanceGoal -> "Quality"
+	]
+},
+	g = Graph[g, VertexStyle -> Thread[Select[Pick[VertexList[g], VertexOutDegree[g], 0], BetaReducePositions[#, 1] === {} &] -> StandardRed]];
+  	If[	TrueQ[OptionValue["Highlight"]],
+		HighlightGraph[g,
+			Style[
+				With[{edges = EdgeList[g]},
+					NestWhilePairList[FirstCase[edges, edge : DirectedEdge[#, next_, {_, 1}] :> {edge, If[next === #, Missing[], next]}] &, lambda, Not @* MissingQ]	
+				],
+				Directive[Thick, StandardRed]
+			]
+		],
+		g
 	]
 ]
 

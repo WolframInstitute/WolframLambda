@@ -766,18 +766,19 @@ LambdaRightApplication[lambda_, sym_ : "@", ___] :=
 
 LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. ToString[$Lambda] | "\[Application]" -> "\[InvisibleSpace]"]
 
-LambdaString[lambda_, "Variables"] := TagLambda[lambda] //. {
-   	Interpretation["\[Lambda]", var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], LambdaString[body, "Variables"]],
+lambdaStringVariables[lambda_] := lambda //. {
+   	Interpretation["\[Lambda]", var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], lambdaStringVariables[body]],
 	Interpretation[_, var_] :> ToString[Unevaluated[var]],
-	f_[x_] :> StringTemplate["(`` ``)"][LambdaString[f, "Variables"], LambdaString[x, "Variables"]]
+	f_[x_] :> Function[StringTemplate[If[StringEndsQ[#1, ")"] || StringStartsQ[#2, "("], "(````)", "(`` ``)"]][##]][lambdaStringVariables[f], lambdaStringVariables[x]]
 }
 
-LambdaString[lambda_, "Indices"] := UntagLambda[lambda] //. {
-   	$Lambda[body_] :> StringTemplate["(\[Lambda] ``)"][LambdaString[body, "Indices"]],
-	f_[x_] :> StringTemplate["(`` ``)"][LambdaString[f, "Indices"], LambdaString[x, "Indices"]]
+lambdaStringIndices[lambda_] := lambda //. {
+   	$Lambda[body_] :> StringTemplate["(\[Lambda] ``)"][lambdaStringIndices[body]],
+	f_[x_] :> StringTemplate["(`` ``)"][lambdaStringIndices[f], lambdaStringIndices[x]]
 }
 
-LambdaString[lambda_, ___] := LambdaString[lambda, "Variables"]
+LambdaString[lambda_, "Indices"] := lambdaStringIndices[UntagLambda[lambda]]
+LambdaString[lambda_, _ : "Variables"] := lambdaStringVariables[TagLambda[lambda]]
 
 ResourceFunction["AddCodeCompletion"]["LambdaString"][None, {"Variables", "Indices"}]
 

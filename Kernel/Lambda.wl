@@ -329,6 +329,8 @@ BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPat
 		OuterPosition[expr, $LambdaPattern[_][_], n],
 		"Random",
 		RandomSample[Position[expr, $LambdaPattern[_][_], Heads -> True], UpTo[n]],
+		"ChildrenFirst",
+		Take[Catenate @ GatherBy[LexicographicSort @ Position[expr, $LambdaPattern[_][_], Heads -> True], Drop[#, - Min[Length[#], 1] ] &], UpTo[n]],
 		_,
 		TreePosition[ExpressionTree[expr, "Subexpressions", Heads -> True], $LambdaPattern[_][_], All, n, TreeTraversalOrder -> order] - 1
 	]
@@ -1307,13 +1309,6 @@ Options[BetaReduceStepPlot] = Join[
 	Options[ListStepPlot]
 ];
 
-BetaReduceStepPlot[lambda_, n : _Integer | _UpTo | Infinity : Infinity, step : Right | Left | Center : Center, opts : OptionsPattern[]] := Block[{
-	positions, path
-},
-	positions = Flatten[Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]], 2];
-	
-	BetaReduceStepPlot[path -> positions, step, opts]
-]
 
 BetaReduceStepPlot[path_List -> positions_List, step : Right | Left | Center : Center, opts : OptionsPattern[]] /; Length[path] > Length[positions] := Block[{
 	width = OptionValue["Width"],
@@ -1403,6 +1398,13 @@ BetaReduceStepPlot[path_List -> positions_List, step : Right | Left | Center : C
 	]
 ]
 
+BetaReduceStepPlot[lambda_, n : _Integer | _UpTo | Infinity : Infinity, step : Right | Left | Center : Center, opts : OptionsPattern[]] := Block[{
+	positions, path
+},
+	positions = Flatten[Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]], 2];
+	
+	BetaReduceStepPlot[path -> positions, step, opts]
+]
 
 
 NestWhilePairList[f_, expr_, test_, m_Integer : 1, max : _Integer | Infinity : Infinity, g_ : First] := 

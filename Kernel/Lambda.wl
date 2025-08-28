@@ -53,6 +53,7 @@ ClearAll[
 	LambdaVariableForm,
 	LambdaBrackets,
 	LambdaString,
+	LambdaToHaskell,
 
 	LambdaFunction,
 	FunctionLambda,
@@ -487,6 +488,21 @@ CombinatorLambda[expr_] := expr //. {
 	CombinatorB -> $Lambda[$Lambda[$Lambda[3[2[1]]]]]
 }
 
+LambdaHaskellTerm[Interpretation["\[Lambda]", tag_][body_]] := "(L(\\" <> ToString[Unevaluated[tag]] <> "->" <> LambdaHaskellTerm[body] <> "))"
+LambdaHaskellTerm[f_[x_]] := "(app " <> LambdaHaskellTerm[f] <> " " <> LambdaHaskellTerm[x] <> ")"
+LambdaHaskellTerm[Interpretation[_, var_]] := ToString[Unevaluated[var]]
+
+LambdaToHaskell[lambda_] := StringTemplate["
+{-# htermination term #-}
+
+
+data Term = L (Term -> Term)
+
+app :: Term -> Term -> Term
+app (L f) x = f x
+
+term = ``
+"][LambdaHaskellTerm[TagLambda[lambda]]]
 
 LambdaFreeVariables[expr_, pos_List : {}, depth_Integer : 0] := Replace[expr, {
 	$LambdaPattern[body_][arg_] :> Join[LambdaFreeVariables[body, Join[pos, {0, 1}], depth + 1], LambdaFreeVariables[arg, Append[pos, 1], depth]],
@@ -624,7 +640,7 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 				"Minimal" | "MinimalColored",
 					All -> {"Scaled", .015},
 				_,
-					All -> Large
+					All -> Medium
 			],
 			TreeElementShape -> Switch[theme,
 				"Minimal",
@@ -814,6 +830,8 @@ ResourceFunction["AddCodeCompletion"]["LambdaString"][None, {"Variables", "Indic
 
 
 LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
+	"Colors",
+	ColorizeLambda[expr, args],
 	"Application",
 	LambdaApplication[expr, args],
 	"RightApplication",
@@ -826,18 +844,31 @@ LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 	LambdaFunction[expr, args],
 	"Combinator",
 	LambdaCombinator[expr, args],
+	"Smiles",
+	LambdaSmiles[expr, args],
 	"Tree",
 	LambdaTree[expr, args],
 	"Graph",
 	LambdaGraph[expr, args],
+	"Diagram",
+	LambdaDiagram[expr, args],
 	"String",
 	LambdaString[expr, args],
 	"BLC",
 	LambdaBLC[expr, args],
+	"Haskell",
+	LambdaToHaskell[expr, args],
 	_,
 	Missing[form]
 ]
-ResourceFunction["AddCodeCompletion"]["LambdaConvert"][None, {"Application", "RightApplication", "VariableForm", "BracketParens", "Function", "Combinator", "Tree", "Graph", "String", "BLC"}]
+ResourceFunction["AddCodeCompletion"]["LambdaConvert"][None,
+	{
+		"Colors", "Application", "RightApplication", "VariableForm", "BracketParens", "Function",
+		"Combinator",
+		"Tree", "Graph", "Diagram",
+		"String", "BLC", "Haskell"
+	}
+]
 
 
 BalancedParenthesesQ[str_] := FixedPoint[StringDelete["()"], StringDelete[str, Except["(" | ")"]]] === ""

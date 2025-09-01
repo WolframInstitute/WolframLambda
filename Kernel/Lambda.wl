@@ -47,6 +47,7 @@ ClearAll[
 	BetaReduceTag,
 	LambdaSingleWayCausalGraph,
 	LambdaCausalGraph,
+	LambdaCausalEvolutionGraph,
 
 	LambdaApplication,
 	LambdaRightApplication,
@@ -95,7 +96,9 @@ If[! ValueQ[$Lambda],
 	$Lambda = \[FormalLambda];
 ]
 
-$LambdaPattern = $Lambda | Interpretation["\[Lambda]" | Style["\[Lambda]", ___], _]
+$LambdaHead = $Lambda | "\[Lambda]" | Style["\[Lambda]", ___]
+
+$LambdaPattern = $LambdaHead | Interpretation["\[Lambda]" | Style["\[Lambda]", ___], _]
 
 
 constructGroupings = Function[Groupings[#, Construct -> 2]]
@@ -253,9 +256,9 @@ betaSubstitute[v : Interpretation[var_Integer | Style[var_Integer, ___], tag_], 
 	Which[
 		var < paramIdx, v,
 		var == paramIdx, offsetFree[arg, paramIdx - 1] //.
-			Interpretation["\[Lambda]", subTag : Except[tag -> _]][body_] :> With[{i = Lookup[$betaSubstituteCounter, subTag, $betaSubstituteCounter[subTag] = 0]},
+			Interpretation[l : "\[Lambda]" | Style["\[Lambda]", ___], subTag : Except[tag -> _]][body_] :> With[{i = Lookup[$betaSubstituteCounter, subTag, $betaSubstituteCounter[subTag] = 0]},
 				$betaSubstituteCounter[subTag]++;
-				Interpretation["\[Lambda]", tag -> Subscript[subTag, i]][body /. Interpretation[e_, subTag] :> Interpretation[e, tag -> Subscript[subTag, i]]]
+				Interpretation[l, tag -> Subscript[subTag, i]][body /. Interpretation[e_, subTag] :> Interpretation[e, tag -> Subscript[subTag, i]]]
 			],
 		var > paramIdx, ReplacePart[v, 1 -> var - 1]
 	]
@@ -518,16 +521,19 @@ LambdaFreeVariables[expr_, pos_List : {}, depth_Integer : 0] := Replace[expr, {
 ClosedLambdaQ[lambda_] := LambdaFreeVariables[lambda] === {}
 
 
+tagLambda[tag_] := Interpretation["\[Lambda]", tag]
+tagLambda[e_, tag_] := If[e === $Lambda, Interpretation["\[Lambda]", tag], Interpretation[e, tag]]
+
 TagLambda[expr_, lambdas_Association] := With[{
 	nextLambdas = KeyMap[# + 1 &] @ lambdas
 },
 	expr /. {
-		$Lambda[body_][y_] :> With[{newLambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]][TagLambda[y, lambdas]]],
-		$Lambda[body_] :> With[{newLambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]]],
+		(l : $LambdaHead)[body_][y_] :> With[{newLambda = tagLambda[l, Unique["\[Lambda]"]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]][TagLambda[y, lambdas]]],
+		(l : $LambdaHead)[body_] :> With[{newLambda = tagLambda[l, Unique["\[Lambda]"]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]]],
 		term_Integer :> Interpretation[term, Evaluate @ If[KeyExistsQ[lambdas, term], lambdas[term][[2]], Max[Keys[lambdas]]]]
 	}
 ]
-TagLambda[$Lambda[body_], "Unique"] := With[{lambda = Interpretation["\[Lambda]", Evaluate[Unique["\[Lambda]"]]]}, lambda[TagLambda[body, <|1 -> lambda|>]]]
+TagLambda[(l : $LambdaHead)[body_], "Unique"] := With[{lambda = tagLambda[l, Unique["\[Lambda]"]]}, lambda[TagLambda[body, <|1 -> lambda|>]]]
 
 SetAttributes[AlphabetString, Listable]
 AlphabetString[0] = ""
@@ -538,14 +544,15 @@ AlphabetString[n_Integer ? NonNegative] := Block[{q, r},
 ]
 
 TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = TagLambda[expr, "Unique"], vars},
-	vars = Cases[lambda, Interpretation["\[Lambda]", tag_] :> tag, All, Heads -> True];
+	If[lambda === expr, Return[expr]];
+	vars = Cases[lambda, Interpretation["\[Lambda]" | Style["\[Lambda]", ___], tag_] :> tag, All, Heads -> True];
 	lambda /. MapThread[
 		With[{sym = Unevaluated @@ #2}, #1 :> sym] &,
 		{vars, PadRight[Replace[symbols, "Alphabet" | Automatic -> {}], Length[vars], MakeExpression /@ AlphabetString[Range[Length[vars]]]]}
 	]
 ]
 
-TagLambda[expr_, "Minimal", symbols_] := expr /. lambda : $Lambda[_] :> TagLambda[lambda, symbols]
+TagLambda[expr_, "Minimal", symbols_] := expr /. lambda : $LambdaHead[_] :> TagLambda[lambda, symbols]
 
 TagLambda[expr_, form_String] := TagLambda[expr, "Minimal", Replace[form, "Minimal" -> "Alphabet"]]
 
@@ -561,11 +568,10 @@ LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[ex
 
 
 FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
-	Style[($Lambda | Function), style___][Style[var_, ___], body_][x_] :> Interpretation[Style["\[Lambda]", style], var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
-	Style[($Lambda | Function), style___][Style[var_, ___], body_] :> Interpretation[Style["\[Lambda]", style], var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
-	(* Style[x_, style___] :> Style[FunctionLambda[Unevaluated[x], vars], style], *)
-	($Lambda | Function)[var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
-	($Lambda | Function)[var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
+	Style[($LambdaHead | Function), style___][Style[var_, ___], body_][x_] :> Interpretation[Style["\[Lambda]", style], var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
+	Style[($LambdaHead | Function), style___][Style[var_, ___], body_] :> Interpretation[Style["\[Lambda]", style], var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
+	($LambdaHead | Function)[var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]][FunctionLambda[Unevaluated[x], vars]],
+	($LambdaHead | Function)[var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, var -> 1]]],
 	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
 	var : Except[$Lambda, _Symbol] :> Interpretation[Evaluate[Replace[var, vars]], var]
 }]
@@ -801,8 +807,9 @@ LambdaLoopbackGraph[lambda_, opts : OptionsPattern[]] := Block[{
 LambdaApplication[lambda_, ___] := lambda //. (f : Except[$LambdaPattern])[x_] :> Application[f, x]
 
 LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {
-	Interpretation["\[Lambda]", tag_][arg_] :> $Lambda[tag, arg],
-	Interpretation[Style["\[Lambda]", style___], tag_][arg_] :> Style[$Lambda, style][Style[tag, style], arg],
+	Interpretation[Style[l : $LambdaHead, style___], tag_][arg_] :> Style[l, style][Style[tag, style], arg],
+	Interpretation[Style[_Integer, style___], tag_] :> Style[tag, style],
+	Interpretation[l : $LambdaHead, tag_][arg_] :> l[tag, arg],
 	Interpretation[_Integer, tag_] :> tag
 }
 
@@ -814,13 +821,13 @@ LambdaRightApplication[lambda_, sym_ : "@", ___] :=
 LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. ToString[$Lambda] | "\[Application]" -> "\[InvisibleSpace]"]
 
 lambdaStringVariables[lambda_] := lambda //. {
-   	Interpretation["\[Lambda]", var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], lambdaStringVariables[body]],
+   	Interpretation[$LambdaHead, var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], lambdaStringVariables[body]],
 	Interpretation[_, var_] :> ToString[Unevaluated[var]],
 	f_[x_] :> Function[StringTemplate[If[StringEndsQ[#1, ")"] || StringStartsQ[#2, "("], "(````)", "(`` ``)"]][##]][lambdaStringVariables[f], lambdaStringVariables[x]]
 }
 
 lambdaStringIndices[lambda_] := lambda //. {
-   	$Lambda[body_] :> StringTemplate["(\[Lambda] ``)"][lambdaStringIndices[body]],
+   	$LambdaHead[body_] :> StringTemplate["(\[Lambda] ``)"][lambdaStringIndices[body]],
 	f_[x_] :> StringTemplate["(`` ``)"][lambdaStringIndices[f], lambdaStringIndices[x]]
 }
 
@@ -1280,19 +1287,28 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	]
 ]
 
+Options[BetaReducePath] = Options[BetaReduceSizes]
+
 BetaReducePath[args__] := Flatten[Reap[BetaReduceSizes[args], "Positions"][[2]], 2]
+
+
+Options[LambdaPathEvents] = Options[BetaReducePath]
 
 LambdaPathEvents[lambda_, args___] := With[{positions = BetaReducePath[lambda, args]},
 	If[	positions === {},
 		{},
-		Block[{taggedlambda = TagLambda[UntagLambda[lambda], "Alphabet"], lambdaPath},
+		Block[{taggedlambda = TagLambda[lambda], lambdaPath},
 			lambdaPath = FoldList[MapAt[BetaSubstitute, #1, {#2}] &, taggedlambda, positions];
 			MapThread[Append[DirectedEdge @@ #1, #3 -> #2] &, {Partition[lambdaPath, 2, 1], positions, Range[Length[positions]]}]
 		]
 	]
 ]
 
-LambdaTags[expr_] := Union @ Cases[expr, Interpretation["\[Lambda]", tag_] :> tag, All, Heads -> True]
+LambdaTag[Interpretation["\[Lambda]" | Style["\[Lambda]", ___], tag_]] := tag
+LambdaTag[head_[_]] := LambdaTag[head]
+LambdaTag[_] := None
+
+LambdaTags[expr_] := Union @ Cases[expr, Interpretation["\[Lambda]" | Style["\[Lambda]", ___], tag_] :> tag, All, Heads -> True]
 
 EventDestroyedCreatedTags[DirectedEdge[lam1_, lam2_, t_ -> pos_]] := With[{
 	tags1 = LambdaTags[Extract[lam1, {pos}][[1]]],
@@ -1301,7 +1317,10 @@ EventDestroyedCreatedTags[DirectedEdge[lam1_, lam2_, t_ -> pos_]] := With[{
 	{Complement[tags1, tags2], Complement[tags2, tags1]}
 ]
 
-LambdaSingleWayCausalGraph[events_List, opts___] := If[events === {}, Graph[{}, opts],
+
+Options[LambdaSingleWayCausalGraph] = Options[Graph]
+
+LambdaSingleWayCausalGraph[events_List, opts : OptionsPattern[]] := If[events === {}, Graph[{}, opts],
 	TransitiveReductionGraph[
 		EdgeDelete[
 			TransitiveClosureGraph @ Graph[events, DirectedEdge @@@ Partition[events, 2, 1]],
@@ -1311,21 +1330,93 @@ LambdaSingleWayCausalGraph[events_List, opts___] := If[events === {}, Graph[{}, 
 			}, AllTrue[created, x |-> AllTrue[destroyed, FreeQ[x, #] &]]]
 		]
 		,
-		opts,
+		FilterRules[{opts}, Options[Graph]],
 		VertexStyle -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "VertexStyle"],
-		VertexLabels -> DirectedEdge[lam1_, lam2_, t_ -> pos_]:> Row[{t, ":", Row[pos], ":", Extract[lam1, {pos}][[1, 0, 0, 2]]}],
+		VertexLabels -> DirectedEdge[lam1_, lam2_, t_ -> pos_]:> Row[{t, ":", Row[pos], ":", LambdaTag @ Extract[lam1, {pos}][[1]]}],
 		EdgeStyle -> LightDarkSwitched[ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "EdgeStyle"], StandardRed],
 		VertexLabels -> Placed[Automatic, Tooltip],
 		GraphLayout -> "LayeredDigraphEmbedding"
 	]
 ]
 
-LambdaCausalGraph[lambda_, t : _Integer | _UpTo : UpTo[Infinity], opts : OptionsPattern[]] := 
+untagTerms[Interpretation[e_, _ -> Subscript[x_, _]]] := untagTerms[Interpretation[e, x]]
+untagTerms[Interpretation[e_, _ -> x_]] := untagTerms[Interpretation[e, x]]
+untagTerms[f_[x_]] := untagTerms[f][untagTerms[x]]
+untagTerms[e_] := e
+
+
+Options[LambdaCausalGraph] = Join[{"Variables" -> False}, Options[LambdaPathEvents], Options[Graph]]
+
+LambdaCausalGraph[lambda_, args : Except[OptionsPattern[]] ..., opts : OptionsPattern[]] := With[{variablesQ = TrueQ[OptionValue[LambdaCausalGraph, {opts}, "Variables"]]},
 	VertexReplace[
-		LambdaSingleWayCausalGraph[LambdaPathEvents[lambda, t], opts],
-		DirectedEdge[from_, to_, tag_] :> DirectedEdge[UntagLambda[from], UntagLambda[to], tag],
-		VertexLabels -> None
+		LambdaSingleWayCausalGraph[LambdaPathEvents[lambda, args, FilterRules[{opts}, Options[LambdaPathEvents]]]],
+		DirectedEdge[from_, to_, tag_] :> (DirectedEdge[untagTerms[from], untagTerms[to], tag]),
+		FilterRules[{opts}, Options[Graph]],
+		VertexLabels -> None,
+		VertexShapeFunction -> _DirectedEdge -> Function[
+			Inset[
+				Framed[
+					Style[
+						Column[
+							If[	variablesQ,
+								{
+									With[{l = TagLambda[#2[[1]]]}, 
+										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, Background -> Lighter[StandardRed, .8]] &, l, {#2[[3, 2]]}] 
+									],
+									With[{l = TagLambda[#2[[2]]]}, 
+										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, Background -> Lighter[StandardBlue, .8]] &, l, {#2[[3, 2]]}]
+									]
+								}
+								,
+								{
+									With[{l = #2[[1]]}, 
+										MapAt[Framed[#, FrameStyle -> None, Background -> Lighter[StandardRed, .8]] &, l, {#2[[3, 2]]}] 
+									],
+									With[{l = #2[[2]]}, 
+										MapAt[Framed[#, FrameStyle -> None, Background -> Lighter[StandardBlue, .8]] &, l, {#2[[3, 2]]}]
+									]
+								}
+							]
+						] /. $Lambda -> "\[Lambda]",
+						$Black,
+						200 * #3
+					], 
+					FrameStyle -> None, 
+					Background -> Lighter[Hue[0.11, 1, 0.97], .8]
+				],
+				#1
+			]
+		],
+		PerformanceGoal -> "Quality"
 	]
+]
+
+Options[LambdaCausalEvolutionGraph] = Options[LambdaCausalGraph]
+
+LambdaCausalEvolutionGraph[args : Except[OptionsPattern[]] .., opts : OptionsPattern[]] := With[{
+	cg = LambdaCausalGraph[args, FilterRules[{opts}, Options[LambdaCausalGraph]]],
+	variablesQ = TrueQ[OptionValue[LambdaCausalEvolutionGraph, {opts}, "Variables"]]
+},
+	EdgeAdd[cg,
+		Replace[VertexList[cg], event : DirectedEdge[from_, to_, tag_] :> Splice[{DirectedEdge[from, event], DirectedEdge[event, to]}], 1],
+		FilterRules[{opts}, Options[Graph]],
+		EdgeStyle -> {Except[_DirectedEdge, _DirectedEdge] -> ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["EdgeStyle"], _ -> Inherited},
+		VertexStyle -> {
+			_ -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph"]["VertexStyle"],
+			Except[_DirectedEdge] -> Automatic
+		},
+		VertexShapeFunction -> {
+			Except[_DirectedEdge] -> Function[
+				ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["VertexShapeFunction"][#1,
+					Style[If[variablesQ, LambdaVariableForm[#2], #2] /. $Lambda -> "\[Lambda]", 200 * #3], None]
+			],
+			_ -> Inherited
+		},
+		FormatType -> StandardForm,
+		PerformanceGoal -> "Quality",
+		AspectRatio -> 4
+	]
+]
 
 
 BetaReduceTag[lambda_, tag_] := MapAt[BetaSubstitute, lambda, Position[lambda, Interpretation["\[Lambda]", tag][_][_]]]

@@ -63,6 +63,7 @@ ClearAll[
 	LambdaLoopbackGraph,
 	LambdaMultiwayGraph,
 	BetaReduceStepPlot,
+	LambdaColorArray,
 
 	LambdaConvert,
 	ParseLambda,
@@ -1484,6 +1485,46 @@ LambdaMultiwayGraph[lambda_, t_, m : _Integer | Infinity : Infinity, opts : Opti
 			]
 		],
 		g
+	]
+]
+
+
+lambdaArryaRow[lambda_] := Replace[lambda, {$Lambda -> 0, xs_List :> Splice[{-1, Splice[lambdaArryaRow /@ xs], -2}]}]
+LambdaArryaRow[lambda_] := lambdaArryaRow /@ LambdaRow[lambda]
+
+$ColorArrayColors = {0 -> Hue[0.87, 1, 1], -1 -> GrayLevel[.8], -2 -> GrayLevel[.5]};
+
+Options[LambdaColorArray] = Join[{
+	"Labeled" -> False,
+	ColorRules -> $ColorArrayColors
+},
+	Options[ArrayPlot]
+]
+
+LambdaColorArray[lamlist : {__}, max : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{rows, plot},
+	rows = LambdaArryaRow /@ Take[lamlist, All, UpTo[max]];
+	plot = ArrayPlot[
+		rows,
+		FilterRules[{opts}, Options[ArrayPlot]],
+		ColorRules ->
+			Flatten[{
+				OptionValue[ColorRules],
+				$ColorArrayColors,
+				x_ :> Blend[Reverse @ {Hue[0.51, 1, 1], Hue[0.66, 1, 1.]}, Rescale[x, {1, Max[Max[rows], 1]}]]
+			}]
+	];
+	If[ TrueQ[OptionValue["Labeled"]],
+		Show[
+			plot,
+			Graphics[
+				MapIndexed[
+					Style[Text[Replace[#1, {0 -> "\[Lambda]", -1 -> "[", -2 -> "]"}], {#2[[2]], #2[[1]]} - {0.5, 0.5}], Directive[White, 14]] &, 
+					Reverse[rows],
+					{2}
+				]
+			]
+		],
+		plot
 	]
 ]
 

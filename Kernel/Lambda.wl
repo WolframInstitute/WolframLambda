@@ -73,6 +73,7 @@ ClearAll[
 
 	TagLambda,
 	UntagLambda,
+	LambdaUntag,
 	LambdaDepths,
 	LambdaPositions,
 	ColorizeLambda,
@@ -256,9 +257,14 @@ betaSubstitute[v : Interpretation[var_Integer | Style[var_Integer, ___], tag_], 
 	Which[
 		var < paramIdx, v,
 		var == paramIdx, offsetFree[arg, paramIdx - 1] //.
-			Interpretation[l : "\[Lambda]" | Style["\[Lambda]", ___], subTag : Except[tag -> _]][body_] :> With[{i = Lookup[$betaSubstituteCounter, subTag, $betaSubstituteCounter[subTag] = 0]},
+			Interpretation[l : "\[Lambda]" | Style["\[Lambda]", ___], subTag : Except[tag -> _]][body_] :> With[{
+				i = Lookup[$betaSubstituteCounter, subTag, $betaSubstituteCounter[subTag] = 0]
+			}, {newTag = Hash[Unevaluated[Subscript[subTag, i]]]},
 				$betaSubstituteCounter[subTag]++;
-				Interpretation[l, tag -> Subscript[subTag, i]][body /. Interpretation[e_, subTag] :> Interpretation[e, tag -> Subscript[subTag, i]]]
+				Function[Null,
+					Interpretation[l, tag -> newTag -> #][body /. Interpretation[e_, subTag] :> Interpretation[e, tag -> newTag -> #]],
+					HoldFirst
+				] @@ Replace[Hold[subTag], Hold[_ -> x_] :> Hold[x]]
 			],
 		var > paramIdx, ReplacePart[v, 1 -> var - 1]
 	]
@@ -1339,10 +1345,11 @@ LambdaSingleWayCausalGraph[events_List, opts : OptionsPattern[]] := If[events ==
 	]
 ]
 
-untagTerms[Interpretation[e_, _ -> Subscript[x_, _]]] := untagTerms[Interpretation[e, x]]
 untagTerms[Interpretation[e_, _ -> x_]] := untagTerms[Interpretation[e, x]]
 untagTerms[f_[x_]] := untagTerms[f][untagTerms[x]]
 untagTerms[e_] := e
+
+LambdaUntag[e_] := untagTerms[e]
 
 
 Options[LambdaCausalGraph] = Join[{"Variables" -> False}, Options[LambdaPathEvents], Options[Graph]]
@@ -1357,36 +1364,38 @@ LambdaCausalGraph[lambda_, args : Except[OptionsPattern[]] ..., opts : OptionsPa
 			Inset[
 				Framed[
 					Style[
-						Column[
+						Text @ Column[
 							If[	variablesQ,
 								{
 									With[{l = TagLambda[#2[[1]]]}, 
-										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, Background -> Lighter[StandardRed, .8]] &, l, {#2[[3, 2]]}] 
+										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardRed, .8]] &, l, {#2[[3, 2]]}] 
 									],
 									With[{l = TagLambda[#2[[2]]]}, 
-										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, Background -> Lighter[StandardBlue, .8]] &, l, {#2[[3, 2]]}]
+										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardBlue, .8]] &, l, {#2[[3, 2]]}]
 									]
 								}
 								,
 								{
 									With[{l = #2[[1]]}, 
-										MapAt[Framed[#, FrameStyle -> None, Background -> Lighter[StandardRed, .8]] &, l, {#2[[3, 2]]}] 
+										MapAt[Framed[#, FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardRed, .8]] &, l, {#2[[3, 2]]}] 
 									],
 									With[{l = #2[[2]]}, 
-										MapAt[Framed[#, FrameStyle -> None, Background -> Lighter[StandardBlue, .8]] &, l, {#2[[3, 2]]}]
+										MapAt[Framed[#, FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardBlue, .8]] &, l, {#2[[3, 2]]}]
 									]
 								}
 							]
 						] /. $Lambda -> "\[Lambda]",
-						$Black,
+						Black,
 						200 * #3
 					], 
 					FrameStyle -> None, 
-					Background -> Lighter[Hue[0.11, 1, 0.97], .8]
+					Background -> Lighter[Hue[0.11, 1, 0.97], .8],
+					RoundingRadius -> 5
 				],
 				#1
 			]
 		],
+		FormatType -> StandardForm,
 		PerformanceGoal -> "Quality"
 	]
 ]
@@ -1408,7 +1417,7 @@ LambdaCausalEvolutionGraph[args : Except[OptionsPattern[]] .., opts : OptionsPat
 		VertexShapeFunction -> {
 			Except[_DirectedEdge] -> Function[
 				ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["VertexShapeFunction"][#1,
-					Style[If[variablesQ, LambdaVariableForm[#2], #2] /. $Lambda -> "\[Lambda]", 200 * #3], None]
+					Style[Text[If[variablesQ, LambdaVariableForm[#2], #2] /. $Lambda -> "\[Lambda]"], 200 * #3], None]
 			],
 			_ -> Inherited
 		},

@@ -44,12 +44,14 @@ ClearAll[
 
 	LambdaCombinator,
 	CombinatorLambda,
+	LambdaTag,
 	LambdaTags,
 	BetaReduceTag,
 	LambdaSingleWayCausalGraph,
 	LambdaCausalGraph,
 	LambdaCausalEvolutionGraph,
 	LambdaMultiwayCausalGraph,
+	LambdaMultiwayCausalEvolutionGraph,
 
 	LambdaApplication,
 	LambdaRightApplication,
@@ -1034,7 +1036,11 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 ]
 
 {$Black, $White, $Red, $Green, $Blue, $Yellow, $Gray} = If[$VersionNumber >= 14.3,
-	{LightDarkSwitched[Black, White], LightDarkSwitched[White, Black], StandardRed, StandardGreen, StandardBlue, StandardYellow, StandardGray},
+	{
+		LightDarkSwitched[Black, White], LightDarkSwitched[White, Black],
+		StandardRed, StandardGreen, StandardBlue, StandardYellow,
+		LightDarkSwitched[Darker[StandardGray], Lighter[StandardGray]]
+	},
 	{White, Black, Red, Green, Blue, LightYellow, Gray}
 ]
 
@@ -1325,25 +1331,32 @@ EventDestroyedCreatedTags[DirectedEdge[lam1_, lam2_, t_ -> pos_]] := With[{
 	{Complement[tags1, tags2], Complement[tags2, tags1]}
 ]
 
+LaterEventActiveQ[DirectedEdge[lam1_, _, _], DirectedEdge[lam2_, _, _ -> pos_]] := ! FreeQ[lam1, Extract[lam2, {pos}][[1, 0, 0]][_][_]]
 
-Options[LambdaSingleWayCausalGraph] = Options[Graph]
 
-LambdaSingleWayCausalGraph[events_List, opts : OptionsPattern[]] := If[events === {}, Graph[{}, opts],
-	TransitiveReductionGraph[
-		EdgeDelete[
-			TransitiveClosureGraph @ Graph[events, DirectedEdge @@@ Partition[events, 2, 1]],
-			DirectedEdge[event1_, event2_] /; With[{
-				destroyed = EventDestroyedCreatedTags[event1][[2]],
-				created = EventDestroyedCreatedTags[event2][[1]]
-			}, AllTrue[created, x |-> AllTrue[destroyed, FreeQ[x, #] &]]]
-		]
-		,
-		FilterRules[{opts}, Options[Graph]],
+Options[LambdaSingleWayCausalGraph] = Join[{Method -> Automatic}, Options[Graph]]
+
+LambdaSingleWayCausalGraph[events_List, opts : OptionsPattern[]] :=
+If[ events === {},
+	Graph[{}, opts]
+	,
+	With[{dependencyOnlyQ = MatchQ[OptionValue[Method], Automatic | "DependencyOnly"]},
+		TransitiveReductionGraph[
+			EdgeDelete[
+				TransitiveClosureGraph @ Graph[events, DirectedEdge @@@ Partition[events, 2, 1]],
+				DirectedEdge[event1_, event2_] /; With[{
+					created = EventDestroyedCreatedTags[event1][[2]],
+					destroyed = EventDestroyedCreatedTags[event2][[1]]
+				}, (dependencyOnlyQ || LaterEventActiveQ[event1, event2]) && AllTrue[destroyed, x |-> AllTrue[created, FreeQ[x, #] &]]]
+			]
+			,
+			FilterRules[{opts}, Options[Graph]],
 		VertexStyle -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "VertexStyle"],
 		VertexLabels -> DirectedEdge[lam1_, lam2_, t_ -> pos_]:> Row[{t, ":", Row[pos], ":", LambdaTag @ LambdaUntag[Extract[lam1, {pos}][[1]]]}],
-		EdgeStyle -> LightDarkSwitched[ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "EdgeStyle"], StandardRed],
-		VertexLabels -> Placed[Automatic, Tooltip],
-		GraphLayout -> "LayeredDigraphEmbedding"
+			EdgeStyle -> LightDarkSwitched[ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "EdgeStyle"], StandardRed],
+			VertexLabels -> Placed[Automatic, Tooltip],
+			GraphLayout -> "LayeredDigraphEmbedding"
+		]
 	]
 ]
 
@@ -1354,17 +1367,18 @@ untagTerms[e_] := e
 LambdaUntag[e_] := untagTerms[e]
 
 
-Options[LambdaCausalGraph] = Join[{"Variables" -> False}, Options[LambdaPathEvents], Options[Graph]]
+Options[LambdaCausalGraph] = Join[{"Variables" -> False, "HighlightLambda" -> False}, Options[LambdaPathEvents], Options[LambdaSingleWayCausalGraph]]
 
 LambdaCausalGraph[lambda : Except[_List], args : Except[OptionsPattern[]] ..., opts : OptionsPattern[]] :=
 	LambdaCausalGraph[LambdaPathEvents[lambda, args, FilterRules[{opts}, Options[LambdaPathEvents]]], opts]
 
 LambdaCausalGraph[pathEvents : {__}, opts : OptionsPattern[]] := With[{
-	variablesQ = TrueQ[OptionValue[LambdaCausalGraph, {opts}, "Variables"]],
+	variablesQ = TrueQ[OptionValue["Variables"]],
+	highlight = If[TrueQ[OptionValue["HighlightLambda"]], MapAt[Style[#, $Red, Bold] &, {0, 0}], Identity],
 	getPos = Replace[_[_, _, (_ -> pos_) | pos_] :> pos]
 },
 	VertexReplace[
-		LambdaSingleWayCausalGraph[pathEvents],
+		LambdaSingleWayCausalGraph[pathEvents, FilterRules[{opts}, FilterRules[Options[LambdaSingleWayCausalGraph], Except[Options[Graph]]]]],
 		DirectedEdge[from_, to_, tag_] :> (DirectedEdge[untagTerms[from], untagTerms[to], tag]),
 		FilterRules[{opts}, Options[Graph]],
 		VertexLabels -> None,
@@ -1376,7 +1390,7 @@ LambdaCausalGraph[pathEvents : {__}, opts : OptionsPattern[]] := With[{
 							If[	variablesQ,
 								{
 									With[{l = TagLambda[#2[[1]]]}, 
-										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardRed, .8]] &, l, {getPos[#2]}] 
+										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[highlight[#]], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardRed, .8]] &, l, {getPos[#2]}] 
 									],
 									With[{l = TagLambda[#2[[2]]]}, 
 										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardBlue, .8]] &, l, {getPos[#2]}]
@@ -1385,9 +1399,9 @@ LambdaCausalGraph[pathEvents : {__}, opts : OptionsPattern[]] := With[{
 								,
 								{
 									With[{l = #2[[1]]}, 
-										MapAt[Framed[#, FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardRed, .8]] &, l, {getPos[#2]}] 
+										MapAt[Framed[highlight[#], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardRed, .8]] &, l, {getPos[#2]}] 
 									],
-									With[{l = #2[[2]]}, 
+									With[{l = #2[[2]]},
 										MapAt[Framed[#, FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardBlue, .8]] &, l, {getPos[#2]}]
 									]
 								}
@@ -1403,7 +1417,7 @@ LambdaCausalGraph[pathEvents : {__}, opts : OptionsPattern[]] := With[{
 				#1
 			]
 		],
-		GraphLayout -> "SymmetricLayeredEmbedding",
+		GraphLayout -> "LayeredDigraphEmbedding",
 		FormatType -> StandardForm,
 		PerformanceGoal -> "Quality"
 	]
@@ -1411,30 +1425,35 @@ LambdaCausalGraph[pathEvents : {__}, opts : OptionsPattern[]] := With[{
 
 Options[LambdaCausalEvolutionGraph] = Options[LambdaCausalGraph]
 
-LambdaCausalEvolutionGraph[args : Except[OptionsPattern[]] .., opts : OptionsPattern[]] := With[{
-	cg = LambdaCausalGraph[args, FilterRules[{opts}, Options[LambdaCausalGraph]]],
+LambdaCausalEvolutionGraph[cg_Graph ? GraphQ, opts : OptionsPattern[]] := With[{
 	variablesQ = TrueQ[OptionValue[LambdaCausalEvolutionGraph, {opts}, "Variables"]]
 },
-	EdgeAdd[cg,
-		Replace[VertexList[cg], event : DirectedEdge[from_, to_, tag_] :> Splice[{DirectedEdge[from, event], DirectedEdge[event, to]}], 1],
-		FilterRules[{opts}, Options[Graph]],
-		EdgeStyle -> {Except[_DirectedEdge, _DirectedEdge] -> ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["EdgeStyle"], _ -> Inherited},
-		VertexStyle -> {
-			_ -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph"]["VertexStyle"],
+	Graph[
+		EdgeAdd[
+			cg,
+			Replace[VertexList[cg], event : DirectedEdge[from_, to_, tag_] :> Splice[{DirectedEdge[from, event], DirectedEdge[event, to]}], 1],
+			EdgeStyle -> {Except[_DirectedEdge, _DirectedEdge] -> ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["EdgeStyle"], _ -> Inherited},
+			VertexStyle -> {
+				_ -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph"]["VertexStyle"],
 			Except[_DirectedEdge] -> Automatic
 		},
 		VertexShapeFunction -> {
 			Except[_DirectedEdge] -> Function[
 				ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["VertexShapeFunction"][#1,
 					Style[Text[If[variablesQ, LambdaVariableForm[#2], #2] /. $Lambda -> "\[Lambda]"], 200 * #3], None]
-			],
-			_ -> Inherited
-		},
-		GraphLayout -> "SymmetricLayeredEmbedding",
-		FormatType -> StandardForm,
-		PerformanceGoal -> "Quality"
+				],
+				_ -> Inherited
+			},
+			GraphLayout -> "LayeredDigraphEmbedding",
+			FormatType -> StandardForm,
+			PerformanceGoal -> "Quality"
+		],
+		FilterRules[{opts}, Options[Graph]]
 	]
 ]
+
+LambdaCausalEvolutionGraph[args : Except[OptionsPattern[]] .., opts : OptionsPattern[]] :=
+	LambdaCausalEvolutionGraph[LambdaCausalGraph[args, FilterRules[{opts}, FilterRules[Options[LambdaCausalGraph], Except[Options[Graph]]]]], opts]
 
 
 LambdaAllPathEvents[lambda_, args___] := Block[{mwg = LambdaMultiwayGraph[lambda, args], taggedlambda = TagLambda[lambda], paths},
@@ -1449,7 +1468,7 @@ Options[LambdaMultiwayCausalGraph] = Join[Options[LambdaCausalGraph], Options[Gr
 
 LambdaMultiwayCausalGraph[args__, opts : OptionsPattern[]] := With[{
 	cgs = VertexReplace[
-		LambdaCausalGraph[#, FilterRules[{opts}, Except[Options[Graph], Options[LambdaCausalGraph]]]],
+		LambdaCausalGraph[#, FilterRules[{opts}, FilterRules[Options[LambdaCausalGraph], Except[Options[Graph]]]]],
 		DirectedEdge[from_, to_, _ -> pos_] :> DirectedEdge[from, to, pos]
 	] & /@ LambdaAllPathEvents[args]
 },
@@ -1463,6 +1482,11 @@ LambdaMultiwayCausalGraph[args__, opts : OptionsPattern[]] := With[{
 		FilterRules[{opts}, Options[Graph]]
 	]
 ]
+
+
+LambdaMultiwayCausalEvolutionGraph[args : Except[OptionsPattern[]] .., opts : OptionsPattern[]] :=
+	LambdaCausalEvolutionGraph[LambdaMultiwayCausalGraph[args, FilterRules[{opts}, FilterRules[Options[LambdaMultiwayCausalGraph], Except[Options[Graph]]]]], opts]
+
 
 
 BetaReduceTag[lambda_, tag_] := MapAt[BetaSubstitute, lambda, Position[lambda, Interpretation["\[Lambda]", tag][_][_]]]
@@ -1590,13 +1614,16 @@ NestWhilePairList[f_, expr_, test_, m_Integer : 1, max : _Integer | Infinity : I
 	]
 
 Options[LambdaMultiwayGraph] = Join[{
-    "Highlight" -> None
+    "Highlight" -> None,
+	"Variables" -> False
 },
 	Options[BetaReducePositions],
 	Options[Graph]
 ]
 
-LambdaMultiwayGraph[lambda_, t_, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{
+LambdaMultiwayGraph[lambda_, t_, m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := With[{
+	variablesQ = TrueQ[OptionValue["Variables"]]
+}, Block[{
 	g = ResourceFunction["NestGraphTagged"][
 		With[{reduceOptions = FilterRules[{opts}, Options[BetaReducePositions]]},
 			expr |-> AssociationMap[MapAt[BetaSubstitute, expr, {#}] &, BetaReducePositions[expr, m, reduceOptions]]
@@ -1604,14 +1631,17 @@ LambdaMultiwayGraph[lambda_, t_, m : _Integer | Infinity : Infinity, opts : Opti
 		lambda, t,
 		FilterRules[{opts}, Options[ResourceFunction["NestGraphTagged"]]],
 		"RuleStyling" -> False,
-		VertexShapeFunction -> ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"],
+		VertexShapeFunction -> Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][#1, If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], #2], #3]],
 		EdgeStyle -> _ -> Hue[0.6, 0.7, 0.7],
 		VertexSize -> {x_ :> .1 Sqrt[LeafCount[x]]},
 		GraphLayout -> "LayeredDigraphEmbedding",
+		FormatType -> StandardForm,
 		PerformanceGoal -> "Quality"
 	]
 },
-	g = Graph[g, VertexStyle -> Thread[Select[Pick[VertexList[g], VertexOutDegree[g], 0], BetaReducePositions[#, 1] === {} &] -> StandardRed]];
+	g = Graph[g,
+		VertexStyle -> Thread[Select[Pick[VertexList[g], VertexOutDegree[g], 0], BetaReducePositions[#, 1] === {} &] -> StandardRed]
+	];
   	If[	TrueQ[OptionValue["Highlight"]],
 		HighlightGraph[g,
 			Style[
@@ -1623,6 +1653,7 @@ LambdaMultiwayGraph[lambda_, t_, m : _Integer | Infinity : Infinity, opts : Opti
 		],
 		g
 	]
+]
 ]
 
 

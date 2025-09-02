@@ -597,7 +597,7 @@ $LambdaTreeColors = <|
    	"BrighterApplication" -> Hue[0.305, 0.795, 0.927], 
    	"BlackLambda" -> Black,
    	"WhiteLambda" -> White,
-	"Edges" -> RGBColor[0.133333, 0.101961, 0.101961], 
+	"Edges" -> RGBColor[0.6, 0.6, 0.6], 
    	"ApplicationBorder" -> GrayLevel[0.6, 1.], 
    	"VariableArgument" -> RGBColor[1., 0.88, 0.77], 
    	"BrighterVariableArgument" -> RGBColor[1., 0.71, 0.06],
@@ -769,47 +769,54 @@ Options[LambdaLoopbackGraph] = Join[Options[LambdaTree], Options[Graph]]
 LambdaLoopbackGraph[lambda_, opts : OptionsPattern[]] := Block[{
 	tree = LambdaTree[lambda, FilterRules[{opts}, Options[LambdaTree]]],
 	variablesQ = TrueQ[OptionValue["VariableLabels"]],
-	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]],
-	lambdaColor, appColor, leaveColor
+	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]]
 },
 	If[FunctionLambda[lambda] =!= lambda, variablesQ = True];
-	lambdaColor = Replace["Lambda", colorRules];
-	appColor = Replace["Application", colorRules];
-	leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules];
+	With[{
+		lambdaColor = Replace["Lambda", colorRules],
+		appColor = Replace["Application", colorRules],
+		leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules]
+	},
 	EdgeAdd[
 		VertexReplace[Graph[tree], {l : $LambdaPattern, _} :> l],
 		DirectedEdge[#, ReplacePart[#[[1]], 1 -> "\[Lambda]"]] & /@ Thread[{TreeExtract[tree, #, TreeData], #}] & @ TreePosition[tree, _, "Leaves"],
 		FilterRules[{opts}, Options[Graph]],
-		VertexShape -> {
-			$LambdaPattern -> Graphics[{
+		VertexShapeFunction -> {
+			$LambdaPattern -> Function[Inset[Graphics[{
 				lambdaColor,
-				Rectangle[{0, 0}, {0.75, 1}, RoundingRadius -> .25]},
-				ImageSize -> 6
-			],
-			{Application, _} -> Graphics[{
+				Rectangle[{0, 0}, {0.75, 1}, RoundingRadius -> .25]
+			},
+				ImageSize -> 200 #3
+			], #1]],
+			{Application, _} -> Function[Inset[Graphics[{
 				appColor,
 				Disk[]
-			}],
-			{_Interpretation, _} -> Graphics[{
+			},
+				ImageSize -> 200 #3
+			], #1]],
+			{_Interpretation, _} -> Function[Inset[Graphics[{
 				leaveColor,
-				Rectangle[{0, 0}, {0.75, 1}]}
-			]
+				Rectangle[{0, 0}, #3 {0.75, 1}]
+			},
+				ImageSize -> 200 #3
+			], #1]]
 		},
 		VertexLabels -> {
 			$LambdaPattern -> Placed["\[Lambda]", Center]
 		},
 		VertexStyle -> {{Application, _} -> appColor},
-		VertexSize -> {$LambdaPattern -> .4, {Application, _} -> .25, _ -> .3},
+		VertexSize -> {_ -> .2, $LambdaPattern -> .2, {Application, _} -> .175},
 		EdgeShapeFunction -> {
 			DirectedEdge[{_Interpretation ,_}, _] ->
 				( BSplineCurve[Insert[{First[#1], Last[#1]}, (Total @ {First[#1], Last[#1]}) / 2 + {If[#1[[1, 1]] > #1[[-1, 1]], 1, -1], 0}, 2]] &)
 		},
 		EdgeStyle -> {
-			_ -> Directive[Replace["Edges", colorRules], Thickness[.1 / VertexCount[tree]]],
+			_ -> Directive[Arrowheads[0], Replace["Edges", colorRules]],
 			DirectedEdge[{_Interpretation, _}, _] -> Directive[$Black, Dashing[Medium]]
 		},
 		VertexCoordinates -> KeyMap[Replace[{l : Interpretation["\[Lambda]", _], _} :> l]] @ Association @ TreeNodeCoordinates[tree],
 		PerformanceGoal -> "Quality"
+	]
 	]
 ]
 
@@ -970,16 +977,17 @@ LambdaRow[f_[x_], depth_ : 0] := Join[LambdaRow[f, depth], LambdaRow[x, depth]]
 LambdaRow[x_, ___] := {x}
 
 Options[LambdaSmiles] = Join[
-	{"Height" -> 1, "Spacing" -> 1, "StandardForm" -> False, "Arguments" -> False, "Arrow" -> False, "Tick" -> True, ColorFunction -> Automatic},
+	{"Height" -> 1, "Spacing" -> 1, "StandardForm" -> False, "Arguments" -> False, "Arrow" -> False, "Tick" -> True, "Colored" -> True, ColorFunction -> $DefaultColorFunction},
 	Options[Style], Options[Graphics]
 ];
 LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	row = LambdaRow[TagLambda[lambda]],
-	lambdaPos, varPos, argPos, lambdas, maxDepth, vars, args, colors, arrows,
+	lambdaPos, varPos, argPos, lambdas, maxDepth, vars, args, colors, varColors, arrows,
 	height = OptionValue["Height"], spacing = OptionValue["Spacing"],
 	argQ = TrueQ[OptionValue["Arguments"]],
 	tickQ = TrueQ[OptionValue["Tick"]],
-	colorFunction = Replace[OptionValue[ColorFunction], Automatic -> (StandardGray &)],
+	colored = OptionValue["Colored"],
+	colorFunction = OptionValue[ColorFunction],
 	styleOpts = FilterRules[{opts}, Options[Style]]
 },
 	row = FixedPoint[
@@ -1007,10 +1015,15 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 	args = AssociationThread[#[[All, 1, 1]], Thread[First /@ argPos -> #[[All, 2]]]] & @ Extract[row, argPos];
 	vars = Extract[row, varPos];
 	colors = Association @ MapIndexed[#1[[1, 1]] -> colorFunction[#2[[1]]] &, Extract[row, lambdaPos]];
+	varColors = $Black & /@ colors;
+	Switch[colored,
+		All, varColors = colors,
+		False | None, colors = varColors
+	];
 	row = row //
-		MapAt[Style["\[Lambda]", Lookup[colors, #[[1, 1]], $Black]] &, lambdaPos] //
-		MapAt[Style[#[[If[argQ, 2, 1]]], Lookup[colors, #[[2]], $Black]] &, varPos] //
-		MapAt[Style[#[[1, 1]], Lookup[colors, #[[1, 1]], $Black]] &, argPos];
+		MapAt[Style["\[Lambda]", Lookup[colors, #[[1, 1]], $Gray]] &, lambdaPos] //
+		MapAt[Style[#[[If[argQ, 2, 1]]], Lookup[colors, #[[2]], $Gray]] &, varPos] //
+		MapAt[Style[#[[1, 1]], Lookup[varColors, #[[1, 1]], $Gray]] &, argPos];
 	
 	arrows = MapThread[
 		With[{dh = height * Ceiling[#1[[1]] / 2], sign = (-1) ^ Boole[EvenQ[#1[[1]]]], h = lambdas[#1[[2]]], l = lambdas[#1[[2]]]},
@@ -1351,8 +1364,8 @@ If[ events === {},
 			]
 			,
 			FilterRules[{opts}, Options[Graph]],
-		VertexStyle -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "VertexStyle"],
-		VertexLabels -> DirectedEdge[lam1_, lam2_, t_ -> pos_]:> Row[{t, ":", Row[pos], ":", LambdaTag @ LambdaUntag[Extract[lam1, {pos}][[1]]]}],
+			VertexStyle -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "VertexStyle"],
+			VertexLabels -> DirectedEdge[lam1_, lam2_, t_ -> pos_]:> Row[{t, ":", Row[pos], ":", LambdaTag @ LambdaUntag[Extract[lam1, {pos}][[1]]]}],
 			EdgeStyle -> LightDarkSwitched[ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "EdgeStyle"], StandardRed],
 			VertexLabels -> Placed[Automatic, Tooltip],
 			GraphLayout -> "LayeredDigraphEmbedding"
@@ -1435,12 +1448,12 @@ LambdaCausalEvolutionGraph[cg_Graph ? GraphQ, opts : OptionsPattern[]] := With[{
 			EdgeStyle -> {Except[_DirectedEdge, _DirectedEdge] -> ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["EdgeStyle"], _ -> Inherited},
 			VertexStyle -> {
 				_ -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph"]["VertexStyle"],
-			Except[_DirectedEdge] -> Automatic
-		},
-		VertexShapeFunction -> {
-			Except[_DirectedEdge] -> Function[
-				ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["VertexShapeFunction"][#1,
-					Style[Text[If[variablesQ, LambdaVariableForm[#2], #2] /. $Lambda -> "\[Lambda]"], 200 * #3], None]
+				Except[_DirectedEdge] -> Automatic
+			},
+			VertexShapeFunction -> {
+				Except[_DirectedEdge] -> Function[
+					ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["VertexShapeFunction"][#1,
+						Style[Text[If[variablesQ, LambdaVariableForm[#2], #2] /. $Lambda -> "\[Lambda]"], 200 * #3], None]
 				],
 				_ -> Inherited
 			},

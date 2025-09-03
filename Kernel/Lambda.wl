@@ -1033,7 +1033,7 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 					colors[#1[[2]]],
 					Arrowheads[Replace[OptionValue["Arrow"], {False | None -> 0, True | Automatic -> Small}]],
 					Arrow[Threaded[{spacing, sign}] * {{#2, height}, {#2, height + dh / (l[[2]] + 1)}, {h[[1]], height + dh / (l[[2]] + 1)}, {h[[1]], height}}],
-					If[argQ && tickQ, Line[Threaded[{spacing, sign}] * {{h[[1]] + 2, height + dh / (l[[2]] + 1)}, {h[[1]] + 2, 3 / 2 height}}], Nothing]
+					If[argQ && tickQ, Line[Threaded[{spacing, sign}] * {{h[[1]] + 2, height + dh / (l[[2]] + 1)}, {h[[1]] + 2, height + 1 / 2 dh / (l[[2]] + 1)}}], Nothing]
 				}
 			]
 		] &,

@@ -1606,7 +1606,7 @@ BetaReduceStepPlot[path_List -> positions_List, step : Right | Left | Center : C
 		step,
 		FilterRules[{opts}, Options[ListStepPlot]],
 		PlotRange -> {{If[clipBoundsQ && ! showInputQ, 1.5, .5], Length[path] + If[clipBoundsQ && ! showOutputQ, -.66, .5]}, {1, All}},
-		PlotRangePadding -> {{0, 0}, {0, Scaled[.1]}},
+		PlotRangePadding -> {{0, If[clipBoundsQ || Length[path] > len, 0, 1]}, {0, Scaled[.1]}},
 		Epilog -> columns[[All, 2]],
 		Filling -> {1 -> Axis},
 		PlotStyle -> RGBColor[0.24, 0.6, 0.8],
@@ -1618,9 +1618,9 @@ BetaReduceStepPlot[path_List -> positions_List, step : Right | Left | Center : C
 BetaReduceStepPlot[lambda_, n : _Integer | _UpTo | Infinity : Infinity, step : Right | Left | Center : Center, opts : OptionsPattern[]] := Block[{
 	positions, path
 },
-	positions = Flatten[Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]], 2];
+	positions = Catenate @ Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]];
 	
-	BetaReduceStepPlot[path -> positions, step, opts]
+	BetaReduceStepPlot[path -> Catenate[positions], step, opts, "ClipBounds" -> Last[positions, {}] =!= {}]
 ]
 
 

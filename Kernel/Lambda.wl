@@ -1353,7 +1353,7 @@ LambdaSingleWayCausalGraph[events_List, opts : OptionsPattern[]] :=
 If[ events === {},
 	Graph[{}, opts]
 	,
-	With[{dependencyOnlyQ = MatchQ[OptionValue[Method], Automatic | "DependencyOnly"]},
+	With[{dependencyOnlyQ = MatchQ[OptionValue[Method], "DependencyOnly"]},
 		TransitiveReductionGraph[
 			EdgeDelete[
 				TransitiveClosureGraph @ Graph[events, DirectedEdge @@@ Partition[events, 2, 1]],
@@ -1380,61 +1380,72 @@ untagTerms[e_] := e
 LambdaUntag[e_] := untagTerms[e]
 
 
-Options[LambdaCausalGraph] = Join[{"Variables" -> False, "HighlightLambda" -> False}, Options[LambdaPathEvents], Options[LambdaSingleWayCausalGraph]]
+Options[eventVertexShapeFunction] = {
+	"ShowIndices" -> False,  "ShowPositions" -> False, "ShowExpressions" -> True,
+	"EventColumnOptions" -> {Alignment -> Center, Background -> {Opacity[0.8, Hue[0.14, 0.34, 1]], RGBColor[0.9997869066419748, 0.8347064306285127, 0.26312831039590046`]}, BaseStyle -> Directive[Opacity[1], Black, Bold, FontFamily -> "Source Code Pro"]},
+	"EventStyleOptions" -> {FontColor -> Directive[Opacity[1], Black], FontFamily -> "Source Code Pro"},
+	"EventFrameOptions" -> {Background -> Directive[Opacity[0.2], Hue[0.14, 0.34, 1]], FrameMargins -> {{2, 2}, {0, 0}}, FrameStyle -> Hue[0.09, 1, 0.91, .3], RoundingRadius -> 2},
+	"Variables" -> False
+};
+
+eventVertexShapeFunction[opts : OptionsPattern[]] := With[{
+	colOpts = {OptionValue["EventColumnOptions"], OptionValue[Options[eventVertexShapeFunction], "EventColumnOptions"]},
+	eventOpts = {OptionValue["EventStyleOptions"], OptionValue[Options[eventVertexShapeFunction], "EventStyleOptions"]},
+	frameOpts = {OptionValue["EventFrameOptions"], OptionValue[Options[eventVertexShapeFunction], "EventFrameOptions"]},
+	showIndex = If[TrueQ[OptionValue["ShowIndices"]], Identity, Nothing &],
+	showPosition = If[TrueQ[OptionValue["ShowPositions"]], Identity, Nothing &],
+	formFunction = If[TrueQ[OptionValue["Variables"]], LambdaVariableForm, Identity],
+	getIndex = Replace[{(index_ -> _) :> index, _ -> Missing[]}],
+	getPos = Replace[(_ -> pos_) | pos_ :> pos]
+},
+{
+	showExpression = If[TrueQ[OptionValue["ShowExpressions"]],
+		Function[formFunction @ ReplacePart[#1, {#2} -> Column[formFunction /@ #3, colOpts]]],
+		(Column[formFunction[#3], colOpts] &)
+	]
+},
+	Function[
+		Replace[#2, DirectedEdge[from_, to_, tag_] :> With[{index = getIndex[tag], pos = getPos[tag]},
+			Inset[
+				Framed[
+					Row[{
+						If[# === {}, Nothing, Column[{Splice[#], SpanFromAbove}, Alignment -> Top]] & @ {showIndex[index], showPosition[pos]},
+						Style[
+							showExpression[from, pos, {Extract[from, {pos}][[1]], Extract[to, {pos}][[1]]}]
+							,
+							200 * #3,
+							eventOpts
+						]},
+						Spacer[1]
+					],
+					frameOpts
+				]
+				, #1
+			]
+		]
+		]
+	]
+]
+
+
+Options[LambdaCausalGraph] = Join[{"Variables" -> False}, Options[eventVertexShapeFunction], Options[LambdaPathEvents], Options[LambdaSingleWayCausalGraph]]
 
 LambdaCausalGraph[lambda : Except[_List], args : Except[OptionsPattern[]] ..., opts : OptionsPattern[]] :=
 	LambdaCausalGraph[LambdaPathEvents[lambda, args, FilterRules[{opts}, Options[LambdaPathEvents]]], opts]
 
-LambdaCausalGraph[pathEvents : {__}, opts : OptionsPattern[]] := With[{
-	variablesQ = TrueQ[OptionValue["Variables"]],
-	highlight = If[TrueQ[OptionValue["HighlightLambda"]], MapAt[Style[#, $Red, Bold] &, {0, 0}], Identity],
-	getPos = Replace[_[_, _, (_ -> pos_) | pos_] :> pos]
-},
+LambdaCausalGraph[{}, ___] := Graph[{}, VertexLabels -> None]
+
+LambdaCausalGraph[pathEvents : {__}, opts : OptionsPattern[]] :=
 	VertexReplace[
 		LambdaSingleWayCausalGraph[pathEvents, FilterRules[{opts}, FilterRules[Options[LambdaSingleWayCausalGraph], Except[Options[Graph]]]]],
 		DirectedEdge[from_, to_, tag_] :> (DirectedEdge[untagTerms[from], untagTerms[to], tag]),
 		FilterRules[{opts}, Options[Graph]],
 		VertexLabels -> None,
-		VertexShapeFunction -> _DirectedEdge -> Function[
-			Inset[
-				Framed[
-					Style[
-						Text @ Column[
-							If[	variablesQ,
-								{
-									With[{l = TagLambda[#2[[1]]]}, 
-										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[highlight[#]], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardRed, .8]] &, l, {getPos[#2]}] 
-									],
-									With[{l = TagLambda[#2[[2]]]}, 
-										LambdaVariableForm @ MapAt[Framed[LambdaVariableForm[#], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardBlue, .8]] &, l, {getPos[#2]}]
-									]
-								}
-								,
-								{
-									With[{l = #2[[1]]}, 
-										MapAt[Framed[highlight[#], FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardRed, .8]] &, l, {getPos[#2]}] 
-									],
-									With[{l = #2[[2]]},
-										MapAt[Framed[#, FrameStyle -> None, FrameMargins -> None, Background -> Lighter[StandardBlue, .8]] &, l, {getPos[#2]}]
-									]
-								}
-							]
-						] /. $Lambda -> "\[Lambda]",
-						Black,
-						200 * #3
-					], 
-					FrameStyle -> None, 
-					Background -> Lighter[Hue[0.11, 1, 0.97], .8],
-					RoundingRadius -> 5
-				],
-				#1
-			]
-		],
+		VertexShapeFunction -> _DirectedEdge -> eventVertexShapeFunction[FilterRules[{opts}, Options[eventVertexShapeFunction]]],
 		GraphLayout -> "LayeredDigraphEmbedding",
 		FormatType -> StandardForm,
 		PerformanceGoal -> "Quality"
 	]
-]
 
 Options[LambdaCausalEvolutionGraph] = Options[LambdaCausalGraph]
 

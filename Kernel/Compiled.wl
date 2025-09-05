@@ -1,5 +1,5 @@
 
-BeginPackage["Wolfram`Lambda`Compiled`"]
+BeginPackage["Wolfram`Lambda`"]
 
 ClearAll[
 	BetaReduceCompiled,

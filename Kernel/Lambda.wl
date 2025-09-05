@@ -380,7 +380,7 @@ BetaReduceList[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infi
 			],
 			HoldFirst
 		], Identity
-	],
+	]
 },
 	progressFunction @ While[True,
 		pos = Sow[BetaReducePositions[lambda, m, subOpts], "Positions"];

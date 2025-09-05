@@ -25,6 +25,8 @@ ClearAll[
 	BetaPositionReductions,
 	BetaReduce,
 	BetaReduceList,
+	BetaReduceListPositions,
+	BetaReduceChain,
 	BetaReduceTreeList,
 	BetaReduceSizes,
 	EtaReduce,
@@ -369,24 +371,53 @@ BetaReduceList[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infi
 	fixPointQ = MatchQ[n, _UpTo],
 	lambda = expr,
 	lambdas = {expr},
-	k
+	k = 0,
+	progressFunction = If[TrueQ[OptionValue[ProgressReporting]],
+		Function[code,
+			Progress`EvaluateWithProgress[
+				code,
+				<|"Text" -> "Reducing lambda expression", "Progress" :> k / limit, "Percentage" :> k / limit, "ElapsedTime" -> Automatic, "RemainingTime" -> Automatic|>
+			],
+			HoldFirst
+		], Identity
+	],
 },
-	Progress`EvaluateWithProgress[
-		For[k = 0, k < limit, k++,
-			pos = Sow[BetaReducePositions[lambda, m, subOpts], "Positions"];
-			If[fixPointQ && pos === {}, Break[]];
-			AppendTo[lambdas, lambda = MapAt[BetaSubstitute, lambda, pos]];
-		],
-		<|"Text" -> "Reducing lambda expression", "Progress" :> k / limit, "Percentage" :> k / limit, "ElapsedTime" -> Automatic, "RemainingTime" -> Automatic|>
+	progressFunction @ While[True,
+		pos = Sow[BetaReducePositions[lambda, m, subOpts], "Positions"];
+		
+		If[fixPointQ && pos === {} || k++ >= limit, Break[]];
+		AppendTo[lambdas, lambda = MapAt[BetaSubstitute, lambda, pos]];
 	];
 	lambdas
 ]
 
+
+Options[BetaReduceListPositions] = Options[BetaReduceList]
+
+BetaReduceListPositions[args___, opts : OptionsPattern[]] := Block[{lambdas, positions},
+	positions = First[Reap[lambdas = BetaReduceList[args, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]], {}];
+	{lambdas, positions}
+]
+
+
 Options[BetaReduceTreeList] = Join[Options[BetaReduceList], Options[HighlightLambdaTree]]
 
-BetaReduceTreeList[lambda_, args___, opts : OptionsPattern[]] := Block[{lambdas, positions},
-	positions = First[Reap[lambdas = BetaReduceList[lambda, args, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]], {}];
-	MapThread[HighlightLambdaTree[##, FilterRules[{opts}, Options[HighlightLambdaTree]]] &, {lambdas, Append[positions, BetaReducePositions[Last[lambdas], opts]]}]
+BetaReduceTreeList[lambda_, args___, opts : OptionsPattern[]] := With[{treeOpts = FilterRules[{opts}, Options[HighlightLambdaTree]]},
+	MapThread[HighlightLambdaTree[##, treeOpts] &, BetaReduceListPositions[lambda, args, FilterRules[{opts}, Options[BetaReduceListPositions]]]]
+]
+
+Options[BetaReduceChain] = Join[Options[BetaReduceListPositions], Options[Framed], Options[Style], Options[Column]]
+
+BetaReduceChain[args___, opts : OptionsPattern[]] := With[{
+	reduceOpts = FilterRules[{opts}, Options[BetaReduceListPositions]],
+	frameOpts = FilterRules[{opts, BaseStyle -> FontColor -> Black, Background -> Replace["Lambda", $LambdaTreeColors]}, Options[Framed]],
+	styleOpts = FilterRules[{opts, FontSize -> 8}, FilterRules[Options[Style], Except[Options[Framed]]]],
+	columnOpts = FilterRules[{opts}, FilterRules[Options[Column], Except[Join[Options[Framed], Options[Style]]]]]
+},
+	Column[
+		MapThread[Text @ Style[MapAt[Framed[#, frameOpts] &, #1, #2], styleOpts] &, BetaReduceListPositions[args, reduceOpts]],
+		columnOpts
+	] /. $Lambda -> "\[Lambda]"
 ]
 
 
@@ -1574,7 +1605,7 @@ Options[BetaReduceStepPlot] = Join[
 ];
 
 
-BetaReduceStepPlot[path_List -> positions_List, step : Right | Left | Center : Center, opts : OptionsPattern[]] /; Length[path] > Length[positions] := Block[{
+BetaReduceStepPlot[path_List -> positions_List, step : Right | Left | Center : Center, opts : OptionsPattern[]] /; Length[path] >= Length[positions] := Block[{
 	width = OptionValue["Width"],
 	showInputQ = TrueQ[OptionValue["ShowInput"]],
 	showOutputQ = TrueQ[OptionValue["ShowOutput"]],
@@ -1667,7 +1698,7 @@ BetaReduceStepPlot[lambda_, n : _Integer | _UpTo | Infinity : Infinity, step : R
 },
 	positions = Catenate @ Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]];
 	
-	BetaReduceStepPlot[path -> Catenate[positions], step, opts, "ClipBounds" -> Last[positions, {}] =!= {}]
+	BetaReduceStepPlot[path -> Most[Catenate[positions]], step, opts, "ClipBounds" -> Last[positions, {}] =!= {}]
 ]
 
 

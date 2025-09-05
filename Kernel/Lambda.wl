@@ -81,7 +81,9 @@ ClearAll[
 	ChurchNumeral,
 	FromChurchNumeral,
 	ChurchNumeralQ,
-	$LambdaBusyBeavers
+	$LambdaBusyBeavers,
+
+	$LambdaResults
 ]
 
 If[ ! ValueQ[$Lambda],
@@ -359,7 +361,7 @@ Options[BetaReduce] = Options[BetaReducePositions]
 BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := 
  	FixedPoint[MapAt[BetaSubstitute, #, Sow[BetaReducePositions[#, m, opts], "Positions"]] &, expr, n]
 
-Options[BetaReduceList] = Options[BetaReducePositions]
+Options[BetaReduceList] = Join[{ProgressReporting -> True}, Options[BetaReducePositions]]
 
 BetaReduceList[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := Block[{
 	subOpts = FilterRules[{opts}, Options[BetaReducePositions]],
@@ -1824,6 +1826,8 @@ $LambdaBusyBeavers := $LambdaBusyBeavers = ParseLambda[StringReplace[#, "\\" -> 
 		{},
   		All
   	]
+
+$LambdaResults = CloudExpression["https://www.wolframcloud.com/obj/nikm/CloudExpression/LambdaResults"]
 
 
 (* ::Section::Closed:: *)

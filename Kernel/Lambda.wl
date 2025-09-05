@@ -799,12 +799,16 @@ HighlightLambdaTree[lambda_, pos : (Automatic | {{___Integer} ...}) : Automatic,
 				ParentEdgeStyle -> Thread[Append[__] /@ treePositions -> Directive[AbsoluteThickness[2], OptionValue["HighlightStyle"]]],
 			"Frames" | "Boxes", {
 				Epilog -> With[{
-					coords = Cases[TreeNodeCoordinates[tree], ({_, Append[#, ___]} -> coord_) :> coord] & /@ treePositions
+					coords = TreeNodeCoordinates[tree]
+				}, {
+					coords = Cases[coords, ({_, Append[#, ___]} -> coord_) :> coord] & /@ treePositions
 				},
 					{EdgeForm[OptionValue["HighlightStyle"]], FaceForm[None], Rectangle @@ ({{-.25, -.25}, {.25, .25}} + CoordinateBoundingBox[#]) & /@ coords}
 				],
 				PlotRangePadding -> Scaled[.1]
-			}
+			},
+			_,
+				Unevaluated[]
 		]
 	]
 ]
@@ -856,46 +860,39 @@ TreeNodeCoordinates[tree_] := Thread[
 Options[LambdaLoopbackGraph] = Join[Options[LambdaTree], Options[Graph]]
 
 LambdaLoopbackGraph[lambda_, opts : OptionsPattern[]] := Block[{
-	tree = LambdaTree[lambda, FilterRules[{opts}, Options[LambdaTree]]],
-	variablesQ = TrueQ[OptionValue["VariableLabels"]],
-	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]]
+	tree = LambdaTree[TagLambda[lambda], FilterRules[{opts}, Options[LambdaTree]]],
+	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]],
+	g, coords, rules
 },
-	If[FunctionLambda[lambda] =!= lambda, variablesQ = True];
 	With[{
 		lambdaColor = Replace["Lambda", colorRules],
 		appColor = Replace["Application", colorRules],
-		leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules],
+		leaveColor = Replace["Variable", colorRules],
 		lambdaLabelColor = Replace["BlackLambda", colorRules],
 		labelColor = Replace["Labels", colorRules]
 	},
+	g = Trees`TreeVisualizationGraph[tree];
+	coords = MapAt[Replace[{l : Interpretation["\[Lambda]", _], _} :> l], TreeNodeCoordinates[tree], {All, 1}];
 	EdgeAdd[
-		VertexReplace[Graph[tree], {l : $LambdaPattern, _} :> l],
+		VertexReplace[g, Thread[VertexList[g] -> coords[[All, 1]]]],
 		DirectedEdge[#, ReplacePart[#[[1]], 1 -> "\[Lambda]"]] & /@ Thread[{TreeExtract[tree, #, TreeData], #}] & @ TreePosition[tree, _, "Leaves"],
 		FilterRules[{opts}, Options[Graph]],
-		VertexShapeFunction -> {
-			$LambdaPattern -> Function[Trees`$TreeVertexShapeFunction[Style[#2, Directive[Bold, lambdaLabelColor]], Directive[Trees`$TreeVertexStyle, lambdaColor], False][##]],
-			{Application, _} -> Function[Trees`$TreeVertexShapeFunction[Null, appColor, False][##]],
-			{_Interpretation, _} -> Function[Trees`$TreeVertexShapeFunction[Style[#2[[1]], labelColor], Directive[Trees`$TreeVertexStyle, leaveColor], True][##]]
-		},
-		VertexLabels -> None,
-		VertexStyle -> {{Application, _} -> appColor},
-		VertexSize -> Medium,
 		EdgeShapeFunction -> {
 			_ -> Trees`$TreeEdgeShapeFunction,
-			DirectedEdge[{_Interpretation ,_}, _] ->
+			DirectedEdge[{_Interpretation, _}, _] ->
 				( BSplineCurve[Insert[{First[#1], Last[#1]}, (Total @ {First[#1], Last[#1]}) / 2 + {If[#1[[1, 1]] > #1[[-1, 1]], 1, -1], 0}, 2]] &)
 		},
 		EdgeStyle -> {
 			_ -> Directive[Arrowheads[0], Replace["Edges", colorRules]],
 			DirectedEdge[{_Interpretation, _}, _] -> Directive[$Black, Thickness[0.005], Dotted]
 		},
-		VertexCoordinates -> KeyMap[Replace[{l : Interpretation["\[Lambda]", _], _} :> l]] @ Association @ TreeNodeCoordinates[tree],
+		VertexCoordinates -> coords,
 		FormatType -> StandardForm,
 		PerformanceGoal -> "Quality"
-	]
+		GraphLayout -> "SymmetricLayeredEmbedding"
 	]
 ]
-
+]
 
 LambdaApplication[lambda_, ___] := lambda //. (f : Except[$LambdaPattern])[x_] :> Application[f, x]
 
@@ -1291,7 +1288,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 					{x_, {y_, z_}} :> {{x - 1 / 4, y - 1 / 4}, {x + 1 / 4, z - 1 / 4}}
 				}]}
 			],
-			Function[{AbsoluteThickness[2], typeColorFunction[#3], Line[Thread[#1]]}]
+			Function[{AbsoluteThickness[1.5], typeColorFunction[#3], Line[Thread[#1]]}]
 		]
 	];
 	pointFunction = If[TrueQ[OptionValue["Thick"]],
@@ -1382,10 +1379,14 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		,
 		Graphics[{
 			Replace[lines,
-				Labeled[line_, pos_ -> type_] :> {Tooltip[lineFunction[line, pos, type], makeTooltip[pos, type]], labelFunction[line, pos, type]},
+				Labeled[line_, pos_ -> type_] :> Tooltip[lineFunction[line, pos, type], makeTooltip[pos, type]],
 				1
 			],
-			dots
+			dots,
+			Replace[lines,
+				Labeled[line_, pos_ -> type_] :> labelFunction[line, pos, type],
+				1
+			]
 		},
 			FilterRules[{opts}, Options[Graphics]]
 		]
@@ -1542,7 +1543,7 @@ LambdaCausalEvolutionGraph[cg_Graph ? GraphQ, opts : OptionsPattern[]] := With[{
 			VertexShapeFunction -> {
 				Except[_DirectedEdge] -> Function[
 					ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph"]["VertexShapeFunction"][#1,
-						Style[Text[If[variablesQ, LambdaVariableForm[#2], #2] /. $Lambda -> "\[Lambda]"], 200 * #3], None]
+						Style[Text[If[variablesQ, LambdaVariableForm[#2], #2] /. $Lambda -> "\[Lambda]"], $Black, 200 * #3], None]
 				],
 				_ -> Inherited
 			},
@@ -1716,28 +1717,30 @@ NestWhilePairList[f_, expr_, test_, m_Integer : 1, max : _Integer | Infinity : I
 	]
 
 Options[LambdaMultiwayGraph] = Join[{
+	"Simple" -> False,
     "HighlightPath" -> None,
 	"Variables" -> False,
 	"VertexShape" -> Automatic
 },
-	Options[BetaReducePositions],
+	Options[BetaPositionReductions],
 	Options[Graph]
 ]
 
 LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := With[{
+	simpleQ = TrueQ[OptionValue["Simple"]],
 	variablesQ = TrueQ[OptionValue["Variables"]],
-	highlight = Replace[OptionValue["HighlightPath"], {True | Automatic -> 1, Except[_Integer] -> None}]
-}, Block[{
+	highlight = Replace[OptionValue["HighlightPath"], {True | Automatic -> 1, Except[_Integer] -> None}],
+	reduceOptions = FilterRules[{opts}, Options[BetaPositionReductions]]
+}, Block[{g, lambdas},
+	If[simpleQ, lambdas = CreateDataStructure["HashSet"]];
 	g = ResourceFunction["NestGraphTagged"][
-		With[{reduceOptions = FilterRules[{opts}, Options[BetaReducePositions]]},
-			expr |-> AssociationMap[MapAt[BetaSubstitute, expr, {#}] &, BetaReducePositions[expr, m, reduceOptions]]
-		],
-		lambda, t,
-		FilterRules[{opts}, Options[ResourceFunction["NestGraphTagged"]]],
+		If[simpleQ && ! lambdas["Insert", #], <||>, BetaPositionReductions[#, m, reduceOptions]] &,
+		lambda,
+		t,
 		"RuleStyling" -> False,
 		VertexShapeFunction -> Replace[OptionValue["VertexShape"], {
 			"Expression" ->
-				Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][#1, Style[If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], #2], $Black], #3]],
+				Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][#1, Style[If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], #2], $Black, 200 * #3], None]],
 			"Tree" | {"Tree", subOpts___} :>
 				Function[Inset[Framed[
 					HighlightLambdaTree[#2, subOpts,
@@ -1753,9 +1756,9 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 		GraphLayout -> "LayeredDigraphEmbedding",
 		FormatType -> StandardForm,
 		PerformanceGoal -> "Quality"
-	]
-},
+	];
 	g = Graph[g,
+		FilterRules[{opts}, Options[ResourceFunction["NestGraphTagged"]]],
 		VertexStyle -> Thread[Select[Pick[VertexList[g], VertexOutDegree[g], 0], BetaReducePositions[#] =!= {} &] -> $LambdaTreeColors["BrighterLambda"]],
 		EdgeStyle -> _ -> Hue[0.6, 0.7, 0.7],
 		VertexSize -> {x_ :> .1 Sqrt[LeafCount[x]]}
@@ -1792,13 +1795,17 @@ LambdaArrayPlot[lamlist : {__}, max : _Integer | Infinity : Infinity, opts : Opt
 	rows = LambdaArrayRow /@ Take[lamlist, All, UpTo[max]];
 	plot = ArrayPlot[
 		rows,
-		FilterRules[{opts}, Options[ArrayPlot]],
-		ColorRules ->
-			Flatten[{
-				OptionValue[ColorRules],
-				$ColorArrayColors,
-				x_ :> Blend[Lookup[$ColorArrayColors, {"MinVar", "MaxVar"}], Rescale[x, {1, Max[Max[rows], 1]}]]
-			}]
+		FilterRules[{
+			opts,
+			ColorRules ->
+				Flatten[{
+					OptionValue[ColorRules],
+					$ColorArrayColors,
+					x_ :> Blend[Lookup[$ColorArrayColors, {"MinVar", "MaxVar"}], Rescale[x, {1, Max[Max[rows], 1]}]]
+				}]
+		},
+			Options[ArrayPlot]
+		]
 	];
 	If[ TrueQ[OptionValue["Labeled"]],
 		Show[

@@ -276,23 +276,22 @@ BetaSubstitute[$LambdaPattern[body_][arg_]] := Block[{$betaSubstituteCounter = <
 BetaSubstitute[expr_] := expr
 
 
-OuterPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] := Block[{k = n, curPos, curPositions, positions},
-	If[ k < 1, Return[{}]];
-	If[ MatchQ[Unevaluated[expr], patt],
-		positions = {pos};
-		k--
-		,
-		positions = {}
-	];
-	If[ k > 0 && ! AtomQ[Unevaluated[expr]],
-		Do[
-			curPos = Append[pos, i];
-			curPositions = With[{subExpr = Extract[Unevaluated[expr], i, Unevaluated]}, OuterPosition[subExpr, patt, k, curPos]];
-			positions = Join[positions, curPositions];
-			k -= Length[curPositions];
-			If[k < 1, Break[]];
-			,
-			{i, Range[0, Length[Unevaluated[expr]]]}
+OuterPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] := Block[{
+	k = n, curPos, curExpr, positions = {}, queue = CreateDataStructure["Queue", {{{}, Hold[expr]}}]
+},
+	While[k > 0 && ! queue["EmptyQ"],
+		{curPos, curExpr} = queue["Pop"];
+		With[{e = Unevaluated @@ curExpr},
+			If[ MatchQ[curExpr, Hold[patt]],
+				AppendTo[positions, curPos];
+				k--
+			];
+			If[ AtomQ[e], Continue[]];
+			Do[
+				queue["Push", {Append[curPos, i], Extract[e, i, Hold]}]
+				,
+				{i, Range[0, Length[e]]}
+			]
 		]
 	];
 	positions

@@ -410,7 +410,7 @@ Options[BetaReduceChain] = Join[Options[BetaReduceListPositions], Options[Framed
 
 BetaReduceChain[args___, opts : OptionsPattern[]] := With[{
 	reduceOpts = FilterRules[{opts}, Options[BetaReduceListPositions]],
-	frameOpts = FilterRules[{opts, BaseStyle -> FontColor -> Black, Background -> Replace["Lambda", $LambdaTreeColors]}, Options[Framed]],
+	frameOpts = FilterRules[{opts, BaseStyle -> FontColor -> Black, Background -> $LambdaStyles["Lambda"]}, Options[Framed]],
 	styleOpts = FilterRules[{opts, FontSize -> 8}, FilterRules[Options[Style], Except[Options[Framed]]]],
 	columnOpts = FilterRules[{opts}, FilterRules[Options[Column], Except[Join[Options[Framed], Options[Style]]]]]
 },
@@ -619,7 +619,7 @@ FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 }]
 
 
-$LambdaTreeColors = <|
+$LambdaStyles = <|
 	"Lambda" -> Hue[0.8174603174603176, 0.20999999999999996`, 1.], 
    	"BrighterLambda" -> Hue[0.833, 0.622, 0.9570000000000001], 
    	"DebruijnIndex" -> Hue[0.576923076923077, 0.13, 1., 1.], 
@@ -629,7 +629,8 @@ $LambdaTreeColors = <|
    	"BrighterApplication" -> Hue[0.305, 0.795, 0.927], 
    	"BlackLambda" -> Black,
    	"WhiteLambda" -> White,
-	"Edges" -> RGBColor[0.6, 0.6, 0.6], 
+	"Edges" -> RGBColor[0.6, 0.6, 0.6],
+	"LoopbackEdges" -> Directive[$Black, Thickness[0.005], Dotted],
    	"ApplicationBorder" -> GrayLevel[0.6, 1.], 
    	"VariableArgument" -> RGBColor[1., 0.88, 0.77], 
    	"BrighterVariableArgument" -> RGBColor[1., 0.71, 0.06],
@@ -637,21 +638,21 @@ $LambdaTreeColors = <|
 	"Labels" -> Black
 |>
 
-$DefaultLambdaTreeColorRules = Join[
+$LambdaTreeColorRules = Join[
 	{
-		"Lambda" -> Directive[$LambdaTreeColors["Lambda"], EdgeForm[$LambdaTreeColors["BrighterLambda"]]],
-		"Application" -> Directive[$LambdaTreeColors["Application"], EdgeForm[$LambdaTreeColors["ApplicationBorder"]]],
-		"Index" -> Directive[$LambdaTreeColors["DebruijnIndex"], EdgeForm[$LambdaTreeColors["DebruijnIndexBorder"]]],
-		"Variable" -> Directive[$LambdaTreeColors["VariableArgument"], EdgeForm[Darker[$LambdaTreeColors["BrighterVariableArgument"], .1]]]
+		"Lambda" -> Directive[$LambdaStyles["Lambda"], EdgeForm[$LambdaStyles["BrighterLambda"]]],
+		"Application" -> Directive[$LambdaStyles["Application"], EdgeForm[$LambdaStyles["ApplicationBorder"]]],
+		"Index" -> Directive[$LambdaStyles["DebruijnIndex"], EdgeForm[$LambdaStyles["DebruijnIndexBorder"]]],
+		"Variable" -> Directive[$LambdaStyles["VariableArgument"], EdgeForm[Darker[$LambdaStyles["BrighterVariableArgument"], .1]]]
 	}
 	,
-	Normal[$LambdaTreeColors]
+	Normal[$LambdaStyles]
 ]
 
 Options[LambdaTree] = Join[{
 	"ApplicationLabel" -> None, "VariableLabels" -> False, "HighlightRedex" -> False,
 	ColorFunction -> $DefaultColorFunction,
-	ColorRules -> $DefaultLambdaTreeColorRules,
+	ColorRules -> $LambdaTreeColorRules,
 	PlotTheme -> Automatic
 },
 	Options[Tree]
@@ -665,7 +666,7 @@ lambdaTree[expr_, opts___] := Tree[expr, None, opts]
 LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 	taggedLambda,
 	theme = OptionValue[PlotTheme],
-	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], $DefaultLambdaTreeColorRules],
+	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], $LambdaTreeColorRules],
 	appLabel = OptionValue["ApplicationLabel"],
 	variablesQ = TrueQ[OptionValue["VariableLabels"]],
 	highlightRedex = Replace[OptionValue["HighlightRedex"], Automatic | True -> StandardRed]
@@ -783,60 +784,71 @@ LambdaTreePosition[expr_, pos : {___Integer}] := If[pos === {}, pos,
 	]
 ]
 
-LambdaTreePosition[expr_, pos_List] := LambdaTreePosition[expr, #] & /@ pos
+LambdaTreePosition[lambda_, pos_List] := With[{expr = UntagLambda[FunctionLambda[lambda]]}, LambdaTreePosition[expr, #] & /@ pos]
 
 Options[HighlightLambdaTree] = Join[{"HighlightStyle" -> StandardRed, Method -> "Edges"}, Options[LambdaTree]]
 
 HighlightLambdaTree[lambda_, pos : (Automatic | {{___Integer} ...}) : Automatic, opts : OptionsPattern[]] := With[{
-	positions = Replace[pos, Automatic :> BetaReducePositions[lambda, FilterRules[{opts}, Options[BetaReducePositions]]]],
+	positions = Replace[pos, Automatic :> BetaReducePositions[FunctionLambda[lambda], FilterRules[{opts}, Options[BetaReducePositions]]]],
 	tree = LambdaTree[lambda, FilterRules[{opts}, Options[LambdaTree]]]
-}, {
-	treePositions = LambdaTreePosition[lambda, positions]
-},
+}, 
   	Tree[tree,
 		Switch[
 			OptionValue[Method],
 			"Edges",
-				ParentEdgeStyle -> Thread[Append[__] /@ treePositions -> Directive[AbsoluteThickness[2], OptionValue["HighlightStyle"]]],
+				ParentEdgeStyle -> Thread[Append[__] /@ LambdaTreePosition[lambda, positions] -> Directive[AbsoluteThickness[2], OptionValue["HighlightStyle"]]]
+			,
 			"Frames" | "Boxes", {
 				Epilog -> With[{
 					coords = TreeNodeCoordinates[tree]
 				}, {
-					coords = Cases[coords, ({_, Append[#, ___]} -> coord_) :> coord] & /@ treePositions
+					coords = Cases[coords, ({_, Append[#, ___]} -> coord_) :> coord] & /@ LambdaTreePosition[lambda, positions]
 				},
 					{EdgeForm[OptionValue["HighlightStyle"]], FaceForm[None], Rectangle @@ ({{-.25, -.25}, {.25, .25}} + CoordinateBoundingBox[#]) & /@ coords}
 				],
 				PlotRangePadding -> Scaled[.1]
-			},
+			}
+			,
+			"Stripes",
+				Prolog -> Block[{g},
+					g = LambdaGraph[tree, "Merge" -> False];
+					MapIndexed[
+						With[{vars = VertexList[g, {ReplacePart[#, 1 -> _Integer], _}], shift = #2[[1]]},
+							Subgraph[g, Union[FindShortestPath[g, #, All] /@ vars]] //
+								First @ GraphPlot[#,
+									EdgeStyle -> $LambdaStyles["LoopbackEdges"],
+									VertexShapeFunction -> None,
+									VertexCoordinates -> GraphEmbedding[#] + Threaded[{- .1 * shift, 0}]
+								] &
+								
+						] &,
+						TreeData /@ TreeCases[tree, Interpretation["\[Lambda]", _]]
+					]
+				]
+			,
 			_,
 				Unevaluated[]
 		]
 	]
 ]
 
-Options[LambdaGraph] = Join[Options[LambdaTree], Options[Graph]]
+Options[LambdaGraph] = Join[{"Merge" -> True}, Options[LambdaTree], Options[Graph]]
 
-LambdaGraph[lambda_, opts : OptionsPattern[]] := Block[{
-	tree = LambdaTree[TagLambda[lambda], "VariableLabels" -> True, FilterRules[{opts}, Options[LambdaTree]]],
-	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]],
+LambdaGraph[lambda_, opts : OptionsPattern[]] :=
+	LambdaGraph[LambdaTree[TagLambda[lambda], "VariableLabels" -> True, FilterRules[{opts}, Options[LambdaTree]]], opts]
+
+LambdaGraph[tree_Tree, opts : OptionsPattern[]] := Block[{
 	g, coords, rules
 },
-	With[{
-		lambdaColor = Replace["Lambda", colorRules],
-		appColor = Replace["Application", colorRules],
-		leaveColor = Replace["Variable", colorRules],
-		lambdaLabelColor = Replace["BlackLambda", colorRules],
-		labelColor = Replace["Labels", colorRules]
-	},
 	g = Trees`TreeVisualizationGraph[tree];
 	coords = TreeNodeCoordinates[tree];
+	g = VertexReplace[g, Thread[VertexList[g] -> coords[[All, 1]]]];
 	rules = {
-		{Application, pos_} :> Interpretation["@", pos],
-		{Interpretation["\[Lambda]", tag_], pos_} :> Interpretation[Subscript["\[Lambda]", tag], pos],
-		{Interpretation[_, tag_], _} :> HoldForm[tag]
+		{l : Interpretation["\[Lambda]", _], _} :> l,
+		If[TrueQ[OptionValue["Merge"]], {Interpretation[_, tag_], _} :> HoldForm[tag], Nothing]
 	};
 	VertexReplace[
-		VertexReplace[g, Thread[VertexList[g] -> coords[[All, 1]]]],
+		g,
 		rules
 		,
 		FilterRules[{opts}, Options[Graph]],
@@ -845,7 +857,6 @@ LambdaGraph[lambda_, opts : OptionsPattern[]] := Block[{
 		PerformanceGoal -> "Quality"
 		GraphLayout -> "SymmetricLayeredEmbedding"
 	]
-]
 ]
 
 
@@ -860,18 +871,12 @@ TreeNodeCoordinates[tree_] := Thread[
 
 Options[LambdaLoopbackGraph] = Join[Options[LambdaTree], Options[Graph]]
 
-LambdaLoopbackGraph[lambda_, opts : OptionsPattern[]] := Block[{
-	tree = LambdaTree[TagLambda[lambda], FilterRules[{opts}, Options[LambdaTree]], TreeElementLabelStyle -> "Leaves" -> Transparent],
-	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]],
+LambdaLoopbackGraph[lambda_, opts : OptionsPattern[]] :=
+	LambdaLoopbackGraph[LambdaTree[TagLambda[lambda], FilterRules[{opts}, Options[LambdaTree]], TreeElementLabelStyle -> "Leaves" -> Transparent], opts]
+
+LambdaLoopbackGraph[tree_Tree, opts : OptionsPattern[]] := Block[{
 	g, coords, rules
 },
-	With[{
-		lambdaColor = Replace["Lambda", colorRules],
-		appColor = Replace["Application", colorRules],
-		leaveColor = Replace["Variable", colorRules],
-		lambdaLabelColor = Replace["BlackLambda", colorRules],
-		labelColor = Replace["Labels", colorRules]
-	},
 	g = Trees`TreeVisualizationGraph[tree];
 	coords = MapAt[Replace[{l : Interpretation["\[Lambda]", _], _} :> l], TreeNodeCoordinates[tree], {All, 1}];
 	EdgeAdd[
@@ -884,15 +889,13 @@ LambdaLoopbackGraph[lambda_, opts : OptionsPattern[]] := Block[{
 				( BSplineCurve[Insert[{First[#1], Last[#1]}, (Total @ {First[#1], Last[#1]}) / 2 + {If[#1[[1, 1]] > #1[[-1, 1]], 1, -1], 0}, 2]] &)
 		},
 		EdgeStyle -> {
-			_ -> Directive[Arrowheads[0], Replace["Edges", colorRules]],
-			DirectedEdge[{_Interpretation, _}, _] -> Directive[$Black, Thickness[0.005], Dotted]
+			DirectedEdge[{_Interpretation, _}, _] -> $LambdaStyles["LoopbackEdges"]
 		},
 		VertexCoordinates -> coords,
 		FormatType -> StandardForm,
 		PerformanceGoal -> "Quality"
 		GraphLayout -> "SymmetricLayeredEmbedding"
 	]
-]
 ]
 
 LambdaApplication[lambda_, ___] := lambda //. (f : Except[$LambdaPattern])[x_] :> Application[f, x]
@@ -1144,10 +1147,10 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 
 
 $LambdaDiagramColorRules = {
-   	"Lambda" -> Replace["Lambda", $DefaultLambdaTreeColorRules],
-   	"Application" | "LambdaApplication" -> Replace["Application", $DefaultLambdaTreeColorRules],
+   	"Lambda" -> Replace["Lambda", $LambdaTreeColorRules],
+   	"Application" | "LambdaApplication" -> Replace["Application", $LambdaTreeColorRules],
    	"Term" -> $Gray,
-   	"Variable" | "FreeVariable" | "Constant" -> Replace["Variable", $DefaultLambdaTreeColorRules],
+   	"Variable" | "FreeVariable" | "Constant" -> Replace["Variable", $LambdaTreeColorRules],
    	_ -> Opacity[1]
 }
 
@@ -1742,7 +1745,7 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 	variablesQ = TrueQ[OptionValue["Variables"]],
 	highlight = Replace[OptionValue["HighlightPath"], {True | Automatic -> 1, Except[_Integer] -> None}],
 	reduceOptions = FilterRules[{opts}, Options[BetaPositionReductions]],
-	highlightStyle = Replace[OptionValue["Highlight"], True | Automatic -> $LambdaTreeColors["BrighterLambda"]]
+	highlightStyle = Replace[OptionValue["Highlight"], True | Automatic :> $LambdaStyles["BrighterLambda"]]
 }, Block[{g, lambdas, highlightNodes},
 	If[simpleQ, lambdas = CreateDataStructure["HashSet"]];
 	g = ResourceFunction["NestGraphTagged"][

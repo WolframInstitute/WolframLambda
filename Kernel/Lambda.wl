@@ -1728,6 +1728,7 @@ NestWhilePairList[f_, expr_, test_, m_Integer : 1, max : _Integer | Infinity : I
 Options[LambdaMultiwayGraph] = Join[{
 	"Simple" -> False,
     "HighlightPath" -> None,
+	"Highlight" -> True,
 	"Variables" -> False,
 	"VertexShape" -> Automatic
 },
@@ -1739,38 +1740,65 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 	simpleQ = TrueQ[OptionValue["Simple"]],
 	variablesQ = TrueQ[OptionValue["Variables"]],
 	highlight = Replace[OptionValue["HighlightPath"], {True | Automatic -> 1, Except[_Integer] -> None}],
-	reduceOptions = FilterRules[{opts}, Options[BetaPositionReductions]]
-}, Block[{g, lambdas},
+	reduceOptions = FilterRules[{opts}, Options[BetaPositionReductions]],
+	highlightStyle = Replace[OptionValue["Highlight"], True | Automatic -> $LambdaTreeColors["BrighterLambda"]]
+}, Block[{g, lambdas, highlightNodes},
 	If[simpleQ, lambdas = CreateDataStructure["HashSet"]];
 	g = ResourceFunction["NestGraphTagged"][
 		If[simpleQ && ! lambdas["Insert", #], <||>, BetaPositionReductions[#, m, reduceOptions]] &,
 		lambda,
 		t,
+		FilterRules[{opts}, Options[ResourceFunction["NestGraphTagged"]]],
 		"RuleStyling" -> False,
-		VertexShapeFunction -> Replace[OptionValue["VertexShape"], {
-			"Expression" ->
-				Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][#1, Style[If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], #2], $Black, 200 * #3], None]],
-			"Tree" | {"Tree", subOpts___} :>
-				Function[Inset[Framed[
-					HighlightLambdaTree[#2, subOpts,
-						"VariableLabels" -> variablesQ, Method -> "Boxes", PlotTheme -> "Minimal",
-						TreeElementSize -> All -> .5,
-						ImagePadding -> 4, ImageSize -> 25 LeafCount[#2] ^ .2
-					]
-				], #1]],
-			"Diagram" | {"Diagram", subOpts___} :>
-				Function[Inset[Framed[LambdaDiagram[#2, subOpts, "Colored" -> True, ColorRules -> {"LambdaApplication" -> StandardRed}, ImageSize -> 30 LeafCount[#2] ^ .2]], #1]],
-			_ -> Automatic
-		}],
 		GraphLayout -> "LayeredDigraphEmbedding",
 		FormatType -> StandardForm,
 		PerformanceGoal -> "Quality"
 	];
+	If[	! MatchQ[highlightStyle, False | None],
+		highlightNodes = Select[Pick[VertexList[g], VertexOutDegree[g], 0], BetaReducePositions[#] =!= {} &]
+	];
 	g = Graph[g,
-		FilterRules[{opts}, Options[ResourceFunction["NestGraphTagged"]]],
-		VertexStyle -> Thread[Select[Pick[VertexList[g], VertexOutDegree[g], 0], BetaReducePositions[#] =!= {} &] -> $LambdaTreeColors["BrighterLambda"]],
-		EdgeStyle -> _ -> Hue[0.6, 0.7, 0.7],
-		VertexSize -> {x_ :> .1 Sqrt[LeafCount[x]]}
+		FilterRules[{opts}, Options[Graph]],
+		VertexShapeFunction -> Map[With[{highlightedQ = ! MatchQ[highlightStyle, False | None] && MemberQ[highlightNodes, #]},
+			# -> Replace[OptionValue["VertexShape"], {
+				"Expression" -> With[{color = If[highlightedQ, highlightStyle, $Black]},
+					Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][
+						#1, Style[If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], #2], color, 200 * #3], None]
+					]
+				],
+				"Tree" | {"Tree", subOpts___} :> With[{background = If[highlightedQ, highlightStyle, None]},
+					Function[Inset[Framed[
+						HighlightLambdaTree[#2, subOpts,
+							"VariableLabels" -> variablesQ, Method -> "Boxes", PlotTheme -> "Minimal",
+							Background -> background,
+							TreeElementSize -> All -> .5,
+							ImagePadding -> 4, ImageSize -> 25 LeafCount[#2] ^ .2
+						]
+					], #1]]
+				],
+				"Diagram" | {"Diagram", subOpts___} :> With[{background = If[highlightedQ, highlightStyle, None]},
+					Function[Inset[
+						Framed[
+							LambdaDiagram[#2, subOpts, "Colored" -> True, Background -> background, ColorRules -> {"LambdaApplication" -> StandardRed}, ImageSize -> 30 LeafCount[#2] ^ .2]
+						],
+						#1
+					]]
+				],
+				type_String | {type_String, args___} :>
+					If[	highlightedQ,
+						Function[Inset[Framed[Style[LambdaConvert[#2, type, args], $Black, 200 * #3], BaseStyle -> highlightStyle], #1]],
+						Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][
+							#1, Style[LambdaConvert[#2, type, args], 200 * #3], None
+						]]
+					]
+				,
+				_ -> Automatic
+			}]] &,
+			VertexList[g]
+		],
+		VertexSize -> {x_ :> .1 Sqrt[LeafCount[x]]},
+		VertexStyle -> Thread[highlightNodes -> highlightStyle],
+		EdgeStyle -> _ -> Hue[0.6, 0.7, 0.7]
 	];
   	If[	highlight === None,
 		g,

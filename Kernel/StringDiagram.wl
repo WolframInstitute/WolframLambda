@@ -1,6 +1,6 @@
 BeginPackage["Wolfram`Lambda`"]
 
-Needs["Wolfram`DiagrammaticComputation`"]
+Get["Wolfram`DiagrammaticComputation`"]
 
 ClearAll[
     LambdaStringDiagram,
@@ -40,7 +40,7 @@ Options[LambdaStringDiagram] = Join[Options[Wolfram`DiagrammaticComputation`Diag
 
 LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := 
     DiagramArrange @ DiagramArrange[
-        ToDiagram[lambda, FilterRules[{opts}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram]]],
+        ToDiagram[TagLambda[lambda], FilterRules[{opts}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram]]],
         FilterRules[{opts}, Options[DiagramArrange]],
         "LoopDiagrams" -> False, "WireLabels" -> False, "Rotate" -> Top, 
         "Frames" -> False, Alignment -> Center, Dividers -> False, 

@@ -24,11 +24,13 @@ ClearAll[
 	BetaReductions,
 	BetaPositionReductions,
 	BetaReduce,
+	BetaReduceFixedPointList,
 	BetaReduceList,
 	BetaReduceListPositions,
 	BetaReduceChain,
 	BetaReduceTreeList,
 	BetaReduceSizes,
+	LambdaLifetime,
 	EtaReduce,
 
 	BetaReducePath,
@@ -48,8 +50,10 @@ ClearAll[
 
 	LambdaApplication,
 	LambdaRightApplication,
+	LambdaForm,
 	LambdaVariableForm,
 	LambdaBrackets,
+	LambdaDepthForm,
 	LambdaString,
 	LambdaToHaskell,
 
@@ -64,6 +68,8 @@ ClearAll[
 	LambdaMultiwayGraph,
 	BetaReduceStepPlot,
 	LambdaArrayPlot,
+	LambdaDepthArrayPlot,
+	LambdaDepthArrayPlot3D,
 
 	LambdaConvert,
 	ParseLambda,
@@ -79,12 +85,15 @@ ClearAll[
 	UncolorizeLambda,
 	LambdaSmiles,
 	LambdaDiagram,
+	LambdaTreeDiagram,
 
 	ChurchNumeral,
 	FromChurchNumeral,
 	ChurchNumeralQ,
 	$LambdaBusyBeavers,
 
+	$LambdaStyles,
+	$LambdaGridStyleRules,
 	$LambdaResults
 ]
 
@@ -98,6 +107,38 @@ Begin["`Private`"];
 $LambdaHead = $Lambda | Global`\[Lambda] | "\[Lambda]" | Style["\[Lambda]", ___]
 
 $LambdaPattern = $LambdaHead | Interpretation["\[Lambda]" | Style["\[Lambda]", ___], _]
+
+$LambdaStyles = <|
+	"Lambda" -> Hue[0.8174603174603176, 0.20999999999999996`, 1.], 
+   	"BrighterLambda" -> Hue[0.833, 0.622, 0.9570000000000001], 
+   	"DebruijnIndex" -> Hue[0.576923076923077, 0.13, 1., 1.], 
+   	"DebruijnIndexBorder" -> RGBColor[0.276768, 0.66747216, 0.72075, 1], 
+   	"BrighterDebruijnIndex" -> Hue[0.52, 0.616, 0.961], 
+   	"Application" -> GrayLevel[0.9, 1], 
+   	"BrighterApplication" -> Hue[0.305, 0.795, 0.927], 
+   	"BlackLambda" -> Black,
+   	"WhiteLambda" -> White,
+	"Edges" -> RGBColor[0.6, 0.6, 0.6],
+	"LoopbackEdges" -> Directive[$Black, Thickness[0.01], Dotted],
+   	"ApplicationBorder" -> GrayLevel[0.6, 1.], 
+   	"VariableArgument" -> RGBColor[1., 0.88, 0.77], 
+   	"BrighterVariableArgument" -> RGBColor[1., 0.71, 0.06],
+	"Variable" -> $Green,
+	"Labels" -> Black
+|>
+
+$LambdaTreeColorRules = Join[
+	{
+		"Lambda" -> Directive[$LambdaStyles["Lambda"], EdgeForm[$LambdaStyles["BrighterLambda"]]],
+		"Application" -> Directive[$LambdaStyles["Application"], EdgeForm[$LambdaStyles["ApplicationBorder"]]],
+		"Index" -> Directive[$LambdaStyles["DebruijnIndex"], EdgeForm[$LambdaStyles["DebruijnIndexBorder"]]],
+		"Variable" -> Directive[$LambdaStyles["VariableArgument"], EdgeForm[Darker[$LambdaStyles["BrighterVariableArgument"], .1]]]
+	}
+	,
+	Normal[$LambdaStyles]
+]
+
+$LambdaGridStyleRules = {Background -> {{GrayLevel[0.93]}, Automatic}, ItemStyle -> {{Italic}, Automatic}, Frame -> All, FrameStyle -> GrayLevel[0.75], Spacings -> {.75, .6}}
 
 
 constructGroupings = Function[Groupings[#, Construct -> 2]]
@@ -279,6 +320,26 @@ betaSubstitute[expr_, arg_, paramIdx_ : 1] := expr
 BetaSubstitute[$LambdaPattern[body_][arg_]] := Block[{$betaSubstituteCounter = <||>}, betaSubstitute[body, arg]]
 BetaSubstitute[expr_] := expr
 
+NormalPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] := Block[{
+	k = n, curPos, curExpr, positions = {}, stack = CreateDataStructure["Stack", {{{}, Hold[expr]}}]
+},
+	While[k > 0 && ! stack["EmptyQ"],
+		{curPos, curExpr} = stack["Pop"];
+		With[{e = Unevaluated @@ curExpr},
+			If[ MatchQ[curExpr, Hold[patt]],
+				AppendTo[positions, curPos];
+				k--
+			];
+			If[ AtomQ[e], Continue[]];
+			Do[
+				stack["Push", {Append[curPos, i], Extract[e, i, Hold]}]
+				,
+				{i, Range[Length[e], 0, -1]}
+			]
+		]
+	];
+	positions
+]
 
 OuterPosition[expr_, patt_, n : _Integer | Infinity : Infinity, pos_List : {}] := Block[{
 	k = n, curPos, curExpr, positions = {}, queue = CreateDataStructure["Queue", {{{}, Hold[expr]}}]
@@ -334,7 +395,9 @@ BetaReducePositions[expr_, n : _Integer | Infinity : Infinity, opts : OptionsPat
 	Switch[order,
 		"Applicative",
 		ApplicativePosition[expr, n],
-		Automatic | "Normal" | "Outermost" | "BreadthFirst",
+		Automatic | "Normal" | "Leftmost",
+		NormalPosition[expr, $LambdaPattern[_][_], n],
+		"Outer" | "Outermost",
 		OuterPosition[expr, $LambdaPattern[_][_], n],
 		"Random",
 		RandomSample[Position[expr, $LambdaPattern[_][_], Heads -> True], UpTo[n]],
@@ -358,20 +421,25 @@ BetaPositionReductions[expr_, n : _Integer | Infinity : Infinity, opts : Options
 	AssociationMap[MapAt[BetaSubstitute, expr, {#}] &, BetaReducePositions[expr, n, opts]]
 
 
-Options[BetaReduce] = Options[BetaReducePositions]
+Options[BetaReduce] = Options[BetaReduceFixedPointList] = Options[BetaReducePositions]
 
 BetaReduce[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := 
  	FixedPoint[MapAt[BetaSubstitute, #, Sow[BetaReducePositions[#, m, opts], "Positions"]] &, expr, n]
 
+BetaReduceFixedPointList[expr_, n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := 
+ 	FixedPointList[MapAt[BetaSubstitute, #, Sow[BetaReducePositions[#, m, opts], "Positions"]] &, expr, n]
+
 Options[BetaReduceList] = Join[{ProgressReporting -> True}, Options[BetaReducePositions]]
 
-BetaReduceList[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := Block[{
+BetaReduceList[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infinity, m : _Integer | Infinity : 1, opts : OptionsPattern[]] := Module[{
 	subOpts = FilterRules[{opts}, Options[BetaReducePositions]],
 	limit = Replace[n, _[x_] :> x],
 	fixPointQ = MatchQ[n, _UpTo],
 	lambda = expr,
 	lambdas = {expr},
 	k = 0,
+	progressFunction
+},
 	progressFunction = If[TrueQ[OptionValue[ProgressReporting]],
 		Function[code,
 			Progress`EvaluateWithProgress[
@@ -379,9 +447,9 @@ BetaReduceList[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Infi
 				<|"Text" -> "Reducing lambda expression", "Progress" :> k / limit, "Percentage" :> k / limit, "ElapsedTime" -> Automatic, "RemainingTime" -> Automatic|>
 			],
 			HoldFirst
-		], Identity
-	]
-},
+		],
+		Identity
+	];
 	progressFunction @ While[True,
 		pos = Sow[BetaReducePositions[lambda, m, subOpts], "Positions"];
 		
@@ -403,19 +471,19 @@ BetaReduceListPositions[args___, opts : OptionsPattern[]] := Block[{lambdas, pos
 Options[BetaReduceTreeList] = Join[Options[BetaReduceList], Options[HighlightLambdaTree]]
 
 BetaReduceTreeList[lambda_, args___, opts : OptionsPattern[]] := With[{treeOpts = FilterRules[{opts}, Options[HighlightLambdaTree]]},
-	MapThread[HighlightLambdaTree[##, treeOpts] &, BetaReduceListPositions[lambda, args, FilterRules[{opts}, Options[BetaReduceListPositions]]]]
+	MapThread[HighlightLambdaTree[##, treeOpts, Method -> None] &, BetaReduceListPositions[lambda, args, FilterRules[{opts}, Options[BetaReduceListPositions]]]]
 ]
 
 Options[BetaReduceChain] = Join[Options[BetaReduceListPositions], Options[Framed], Options[Style], Options[Column]]
 
 BetaReduceChain[args___, opts : OptionsPattern[]] := With[{
 	reduceOpts = FilterRules[{opts}, Options[BetaReduceListPositions]],
-	frameOpts = FilterRules[{opts, BaseStyle -> FontColor -> Black, Background -> $LambdaStyles["Lambda"]}, Options[Framed]],
-	styleOpts = FilterRules[{opts, FontSize -> 8}, FilterRules[Options[Style], Except[Options[Framed]]]],
-	columnOpts = FilterRules[{opts}, FilterRules[Options[Column], Except[Join[Options[Framed], Options[Style]]]]]
+	frameOpts = FilterRules[{opts, BaseStyle -> FontColor -> Black, Background -> LightRed, FrameStyle -> None, FrameMargins -> 0}, Options[Framed]],
+	styleOpts = FilterRules[{opts, FontSize -> 10}, FilterRules[Options[Style], Except[Options[Framed]]]],
+	columnOpts = FilterRules[{opts, Spacings -> 0.2}, FilterRules[Options[Column], Except[Join[Options[Framed], Options[Style]]]]]
 },
 	Column[
-		MapThread[Text @ Style[MapAt[Framed[#, frameOpts] &, #1, #2], styleOpts] &, BetaReduceListPositions[args, reduceOpts]],
+		MapThread[Style[MapAt[Framed[#, frameOpts] &, #1, #2], styleOpts] &, BetaReduceListPositions[args, reduceOpts]],
 		columnOpts
 	] /. $Lambda -> "\[Lambda]"
 ]
@@ -439,6 +507,14 @@ BetaReduceSizes[expr_, n : _Integer | Infinity | UpTo[_Integer | Infinity] : Inf
 	];
 	{lambda, sizes}
 ]
+
+
+LambdaLifetime[expr_, maxsteps_Integer : 50] :=
+	If[# >= maxsteps, -Infinity, #] &[Length[Last[BetaReduceSizesCompiled[expr, UpTo[maxsteps]]]]]
+
+LambdaLifetime[expr_, maxsteps_Integer : 50, opts : OptionsPattern[TreePosition]] :=
+	If[# >= maxsteps, -Infinity, #] &[Length[Last[BetaReduceSizes[expr, UpTo[maxsteps], opts]]]]
+
 
 (* substitute all variables *)
 LambdaSubstitute[expr_, vars_Association : <||>, offset_Integer : 0] :=
@@ -619,35 +695,6 @@ FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 }]
 
 
-$LambdaStyles = <|
-	"Lambda" -> Hue[0.8174603174603176, 0.20999999999999996`, 1.], 
-   	"BrighterLambda" -> Hue[0.833, 0.622, 0.9570000000000001], 
-   	"DebruijnIndex" -> Hue[0.576923076923077, 0.13, 1., 1.], 
-   	"DebruijnIndexBorder" -> RGBColor[0.276768, 0.66747216, 0.72075, 1], 
-   	"BrighterDebruijnIndex" -> Hue[0.52, 0.616, 0.961], 
-   	"Application" -> GrayLevel[0.9, 1], 
-   	"BrighterApplication" -> Hue[0.305, 0.795, 0.927], 
-   	"BlackLambda" -> Black,
-   	"WhiteLambda" -> White,
-	"Edges" -> RGBColor[0.6, 0.6, 0.6],
-	"LoopbackEdges" -> Directive[$Black, Thickness[0.005], Dotted],
-   	"ApplicationBorder" -> GrayLevel[0.6, 1.], 
-   	"VariableArgument" -> RGBColor[1., 0.88, 0.77], 
-   	"BrighterVariableArgument" -> RGBColor[1., 0.71, 0.06],
-	"Variable" -> $Green,
-	"Labels" -> Black
-|>
-
-$LambdaTreeColorRules = Join[
-	{
-		"Lambda" -> Directive[$LambdaStyles["Lambda"], EdgeForm[$LambdaStyles["BrighterLambda"]]],
-		"Application" -> Directive[$LambdaStyles["Application"], EdgeForm[$LambdaStyles["ApplicationBorder"]]],
-		"Index" -> Directive[$LambdaStyles["DebruijnIndex"], EdgeForm[$LambdaStyles["DebruijnIndexBorder"]]],
-		"Variable" -> Directive[$LambdaStyles["VariableArgument"], EdgeForm[Darker[$LambdaStyles["BrighterVariableArgument"], .1]]]
-	}
-	,
-	Normal[$LambdaStyles]
-]
 
 Options[LambdaTree] = Join[{
 	"ApplicationLabel" -> None, "VariableLabels" -> False, "HighlightRedex" -> False,
@@ -898,7 +945,10 @@ LambdaLoopbackGraph[tree_Tree, opts : OptionsPattern[]] := Block[{
 	]
 ]
 
+
 LambdaApplication[lambda_, ___] := lambda //. (f : Except[$LambdaPattern])[x_] :> Application[f, x]
+
+LambdaForm[lambda_] := UntagLambda[lambda] /. $LambdaHead -> "\[Lambda]"
 
 LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {
 	Interpretation[Style[l : $LambdaHead, style___], tag_][arg_] :> Style[l, style][Style[HoldForm[tag], style], arg],
@@ -912,7 +962,11 @@ LambdaRightApplication[lambda_, sym_ : "@", ___] :=
 		Row[{prefix : Except[sym] ..., Row[{a__, sym, b__}], c__}] :> Row[{prefix, "(", a, sym, b, ")", c}]
 
 
-LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. ToString[$Lambda] | "\[Application]" -> "\[InvisibleSpace]"]
+LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda] /. $LambdaHead -> "\[InvisibleSpace]"] /. "\[Application]" -> "\[InvisibleSpace]"]
+
+LambdaDepthForm[expr_] := With[{lambda = TagLambda[expr]}, {lambdas = Cases[lambda, Interpretation["\[Lambda]", _], All, Heads -> True]},
+	lambda /. MapThread[x : #1 | ReplacePart[#1, 1 -> _Integer] :> Nest[UnderBar,x,  #2] &, {lambdas, Range[Length[lambdas]]}]
+]
 
 lambdaStringVariables[lambda_] := lambda //. {
    	Interpretation[$LambdaHead, var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], lambdaStringVariables[body]],
@@ -943,6 +997,8 @@ LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 	LambdaVariableForm[expr, args],
 	"BracketParens" | "Brackets",
 	LambdaBrackets[expr, args],
+	"DepthForm",
+	LambdaDepthForm[expr, args],
 	"Function",
 	LambdaFunction[expr, args],
 	"Combinator",
@@ -966,8 +1022,8 @@ LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 ]
 ResourceFunction["AddCodeCompletion"]["LambdaConvert"][None,
 	{
-		"Colors", "Application", "RightApplication", "VariableForm", "BracketParens", "Function",
-		"Combinator",
+		"Colors", "Application", "RightApplication", "VariableForm", "BracketParens", "DepthForm",
+		"Function", "Combinator",
 		"Tree", "Graph", "Diagram",
 		"String", "BLC", "Haskell"
 	}
@@ -1263,7 +1319,7 @@ LambdaDepths[expr_, depth_Integer : 0] := Replace[expr, {
 	f_[arg_] :> (LambdaDepths[f, depth]; LambdaDepths[arg, depth])
 }]
 
-LambdaPositions[expr_] := Block[{lambda = TagLambda[UntagLambda[expr], "Unique"], lambdaPos, argPos, tags, argTags},
+LambdaPositions[expr_] := Block[{lambda = TagLambda[UntagLambda[expr]], lambdaPos, argPos, tags, argTags},
 	lambdaPos = Position[lambda, Interpretation["\[Lambda]", _], Heads -> True];
 	argPos = Position[lambda, Interpretation[_Integer, tag_], Heads -> True];
 	tags = Extract[lambda, Append[2] /@ lambdaPos];
@@ -1405,6 +1461,49 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		]
 	]
 ]
+
+
+Options[LambdaTreeDiagram] = Join[Options[LambdaDiagram], Options[LambdaTree]]
+
+LambdaTreeDiagram[lambda_, opts : OptionsPattern[]] := Block[{diagram = 
+    LambdaDiagram[lambda, FilterRules[{opts}, Options[LambdaDiagram]], "Dots" -> False],
+	alternativeQ = TrueQ[OptionValue["Alternative"]],
+	tree, graph, vertices,
+	treePositionMap, pos1, pos2, permutation, coords
+},
+	tree = LambdaTree[lambda, FilterRules[{opts}, Options[LambdaTree]]];
+	graph = Trees`TreeVisualizationGraph[tree];
+	pos1 = TreePosition[tree, _];
+	pos2 = TreePosition[tree, _, TreeTraversalOrder -> "TopDown"];
+	permutation = FindPermutation[pos1, pos2];
+	treePositionMap = AssociationThread[TreePosition[ExpressionTree[lambda, "Subexpressions", "Heads" -> True], _Integer | _[_]] - 1, pos1];
+	vertices = VertexList[tree][[All, 2]];
+	coords = Lookup[
+		Cases[diagram, 
+			Tooltip[{___, l_Line} | l_Line, (type_ -> expr_)] :> 
+				With[{pos = FirstPosition[expr, _Framed]}, 
+					Lookup[treePositionMap, Key[pos]] -> 
+						With[{len = RegionMeasure[l, 1]}, 
+							Switch[type,
+								"Variable", 
+									If[len == 0 && alternativeQ, RegionCentroid[l] + {0, .1}, l[[1, 1]] - {0, 1/2}],
+								"Lambda",
+									If[len == 0, {0, 0}, RegionCentroid[l] + {-len/2, 0}],
+								_,
+									RegionCentroid[l]
+							]
+						]
+				],
+			All
+		],
+		Permute[vertices, permutation]
+	];
+	Show[
+		diagram, 
+		Graph[graph, VertexCoordinates -> Thread[VertexList[graph] -> coords]]
+	]
+]
+
 
 Options[BetaReducePath] = Options[BetaReduceSizes]
 
@@ -1712,7 +1811,7 @@ BetaReduceStepPlot[lambda_, n : _Integer | _UpTo | Infinity : Infinity, step : R
 },
 	positions = Catenate @ Reap[path = BetaReduceList[lambda, n, FilterRules[{opts}, Options[BetaReduceList]]], "Positions"][[2]];
 	
-	BetaReduceStepPlot[path -> Most[Catenate[positions]], step, opts, "ClipBounds" -> Last[positions, {}] =!= {}]
+	BetaReduceStepPlot[path -> Catenate[Most[positions]], step, opts, "ClipBounds" -> Last[positions, {}] =!= {}]
 ]
 
 
@@ -1730,7 +1829,7 @@ NestWhilePairList[f_, expr_, test_, m_Integer : 1, max : _Integer | Infinity : I
 	]
 
 Options[LambdaMultiwayGraph] = Join[{
-	"Simple" -> False,
+	"Simple" -> True,
     "HighlightPath" -> None,
 	"Highlight" -> True,
 	"Variables" -> False,
@@ -1745,19 +1844,18 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 	variablesQ = TrueQ[OptionValue["Variables"]],
 	highlight = Replace[OptionValue["HighlightPath"], {True | Automatic -> 1, Except[_Integer] -> None}],
 	reduceOptions = FilterRules[{opts}, Options[BetaPositionReductions]],
-	highlightStyle = Replace[OptionValue["Highlight"], True | Automatic :> $LambdaStyles["BrighterLambda"]]
-}, Block[{g, lambdas, highlightNodes},
-	If[simpleQ, lambdas = CreateDataStructure["HashSet"]];
+	highlightStyle = OptionValue["Highlight"]
+}, {
+	highlightStyle1 = Replace[highlightStyle, True | Automatic :> $LambdaStyles["Lambda"]],
+	highlightStyle2 = Replace[highlightStyle, True | Automatic :> $LambdaStyles["BrighterLambda"]]
+}, Block[{g, highlightNodes},	
 	g = ResourceFunction["NestGraphTagged"][
-		If[simpleQ && ! lambdas["Insert", #], <||>, BetaPositionReductions[#, m, reduceOptions]] &,
+		KeySort[Block[{i = 1}, KeyMap[{#, i++} &] @ If[simpleQ, DeleteDuplicates, Identity] @ BetaPositionReductions[#, m, reduceOptions]], LexicographicOrder] &,
 		lambda,
 		t,
-		FilterRules[{opts}, Options[ResourceFunction["NestGraphTagged"]]],
-		"RuleStyling" -> False,
-		GraphLayout -> "LayeredDigraphEmbedding",
-		FormatType -> StandardForm,
-		PerformanceGoal -> "Quality"
+		FilterRules[{opts}, Options[ResourceFunction["NestGraphTagged"]]]
 	];
+	g = Graph[VertexList[g], MapAt[First, EdgeList[g], {All, 3}]];
 	If[	! MatchQ[highlightStyle, False | None],
 		highlightNodes = Select[Pick[VertexList[g], VertexOutDegree[g], 0], BetaReducePositions[#] =!= {} &]
 	];
@@ -1765,34 +1863,40 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 		FilterRules[{opts}, Options[Graph]],
 		VertexShapeFunction -> Map[With[{highlightedQ = ! MatchQ[highlightStyle, False | None] && MemberQ[highlightNodes, #]},
 			# -> Replace[OptionValue["VertexShape"], {
-				"Expression" -> With[{color = If[highlightedQ, highlightStyle, $Black]},
-					Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][
-						#1, Style[If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], #2], color, 200 * #3], None]
+				"Expression" -> With[{background = If[highlightedQ, highlightStyle1, None]},
+					If[	highlightedQ,
+						Function[Inset[Text @ Framed[Style[If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], LambdaForm[#2]], $Black, 200 * #3], BaseStyle -> Background -> highlightStyle1], #1]],
+						Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][
+							#1, Text @ Style[If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], LambdaForm[#2]], $Black, 200 * #3], None
+						]]
 					]
 				],
-				"Tree" | {"Tree", subOpts___} :> With[{background = If[highlightedQ, highlightStyle, None]},
+				"Tree" | {"Tree", subOpts___} :> With[{background = If[highlightedQ, highlightStyle1, None], frame = If[highlightedQ, highlightStyle2, Automatic]},
 					Function[Inset[Framed[
 						HighlightLambdaTree[#2, subOpts,
 							"VariableLabels" -> variablesQ, Method -> "Boxes", PlotTheme -> "Minimal",
-							Background -> background,
 							TreeElementSize -> All -> .5,
-							ImagePadding -> 4, ImageSize -> 25 LeafCount[#2] ^ .2
-						]
+							ImageSize -> #3 * 25 * LeafCount[#2] ^ .2
+						],
+						Background -> background,
+						FrameStyle -> frame
 					], #1]]
 				],
-				"Diagram" | {"Diagram", subOpts___} :> With[{background = If[highlightedQ, highlightStyle, None]},
+				"Diagram" | {"Diagram", subOpts___} :> With[{background = If[highlightedQ, highlightStyle1, None], frame = If[highlightedQ, highlightStyle2, Automatic]},
 					Function[Inset[
 						Framed[
-							LambdaDiagram[#2, subOpts, "Colored" -> True, Background -> background, ColorRules -> {"LambdaApplication" -> StandardRed}, ImageSize -> 30 LeafCount[#2] ^ .2]
+							LambdaDiagram[#2, subOpts, "Colored" -> True, ColorRules -> {"LambdaApplication" -> StandardRed}, ImageSize -> #3 * 30 * LeafCount[#2] ^ .2],
+							Background -> background,
+							FrameStyle -> frame
 						],
 						#1
 					]]
 				],
 				type_String | {type_String, args___} :>
 					If[	highlightedQ,
-						Function[Inset[Framed[Style[LambdaConvert[#2, type, args], $Black, 200 * #3], BaseStyle -> highlightStyle], #1]],
+						Function[Inset[Text @ Framed[Style[LambdaConvert[#2, type, args], $Black, 200 * #3], BaseStyle -> Background -> highlightStyle1], #1]],
 						Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][
-							#1, Style[LambdaConvert[#2, type, args], 200 * #3], None
+							#1, Text @ Style[LambdaConvert[#2, type, args], 200 * #3], None
 						]]
 					]
 				,
@@ -1800,9 +1904,12 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 			}]] &,
 			VertexList[g]
 		],
-		VertexSize -> {x_ :> .1 Sqrt[LeafCount[x]]},
-		VertexStyle -> Thread[highlightNodes -> highlightStyle],
-		EdgeStyle -> _ -> Hue[0.6, 0.7, 0.7]
+		VertexSize -> If[MatchQ[OptionValue["VertexShape"], Automatic], x_ :> .1 Sqrt[LeafCount[x]], Automatic],
+		VertexStyle -> Thread[highlightNodes -> highlightStyle2],
+		EdgeStyle -> _ -> Hue[0.6, 0.7, 0.7],
+		GraphLayout -> "LayeredDigraphEmbedding",
+		FormatType -> StandardForm,
+		PerformanceGoal -> "Quality"
 	];
   	If[	highlight === None,
 		g,
@@ -1810,7 +1917,7 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 			Style[
 				With[{edges = EdgeList[g]},
 					Join[#, VertexList[#]] & @
-						NestWhilePairList[FirstCase[edges, edge : DirectedEdge[#, next_, {_, highlight}] :> {edge, If[next === #, Missing[], next]}] &, lambda, Not @* MissingQ]
+						NestWhilePairList[FirstCase[edges, edge : DirectedEdge[#, next_, {_, highlight}] :> {edge, If[next === #, Missing[], next]}] &, lambda, Not @* MissingQ, 1, t]
 				],
 				Directive[Thick, StandardRed]
 			]
@@ -1819,11 +1926,18 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 ]
 ]
 
-
-lambdaArrayRow[lambda_] := Replace[lambda, {$LambdaHead -> {0}, {x_, xs__} :> Join[lambdaArrayRow[x], Catenate[Join[{-1}, lambdaArrayRow[#], {-2}] & /@ {xs}]], x_ :> {x}}]
+ClearAll[lambdaArrayRow]
+lambdaArrayRow[lambda_, depth_ : 0] :=
+	Replace[lambda, {
+		$LambdaHead :> {Sow[depth]; 0},
+		{x_, xs__} :> Join[lambdaArrayRow[x, depth], Catenate[Join[Sow[depth + 1]; {-1}, lambdaArrayRow[#, depth + 1], Sow[depth + 1]; {-2}] & /@ {xs}]],
+		x_ :> {Sow[depth]; x}
+	}]
 LambdaArrayRow[lambda_] := lambdaArrayRow @ LambdaRow[UntagLambda[lambda]]
 
-$ColorArrayColors = {0 -> Hue[0.87, 1, 1], -1 -> GrayLevel[.8], -2 -> GrayLevel[.5], "MinVar" -> Hue[0.66, 1, 1.], "MaxVar" -> Hue[0.51, 1, 1]}
+LambdaArrayRowDepths[lambda_] := MapAt[First, Reap[LambdaArrayRow[lambda]], 2]
+
+$ColorArrayColors = {0 -> Hue[0.87, 1, 1], -1 -> GrayLevel[.8], -2 -> GrayLevel[.5], -3 -> None, "MinVar" -> Hue[0.66, 1, 1.], "MaxVar" -> Hue[0.51, 1, 1]}
 
 Options[LambdaArrayPlot] = Join[{
 	"Labeled" -> False,
@@ -1832,21 +1946,16 @@ Options[LambdaArrayPlot] = Join[{
 	Options[ArrayPlot]
 ]
 
-LambdaArrayPlot[lamlist : {__}, max : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{rows, plot},
-	rows = LambdaArrayRow /@ Take[lamlist, All, UpTo[max]];
+LambdaArrayPlot[lambdas : {__}, max : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Block[{rows, colorRules, plot},
+	rows = Take[LambdaArrayRow /@ lambdas, All, UpTo[max]];
+	colorRules = Flatten[{OptionValue[ColorRules], $ColorArrayColors}];
 	plot = ArrayPlot[
 		rows,
-		FilterRules[{
-			opts,
-			ColorRules ->
-				Flatten[{
-					OptionValue[ColorRules],
-					$ColorArrayColors,
-					x_ :> Blend[Lookup[$ColorArrayColors, {"MinVar", "MaxVar"}], Rescale[x, {1, Max[Max[rows], 1]}]]
-				}]
-		},
-			Options[ArrayPlot]
-		]
+		ColorRules -> Append[
+			colorRules,
+			x_ :> Blend[Lookup[colorRules, {"MinVar", "MaxVar"}], Rescale[x, {1, Max[rows, 1]}]]
+		],
+		FilterRules[{opts}, Options[ArrayPlot]]
 	];
 	If[ TrueQ[OptionValue["Labeled"]],
 		Show[
@@ -1860,6 +1969,53 @@ LambdaArrayPlot[lamlist : {__}, max : _Integer | Infinity : Infinity, opts : Opt
 			]
 		],
 		plot
+	]
+]
+
+Options[LambdaDepthArrayPlot] = Join[{
+	ColorRules -> $ColorArrayColors
+},
+	Options[ArrayPlot]
+]
+
+LambdaDepthArrayPlot[lambda_, max : _Integer | Infinity : Infinity, opts : OptionsPattern[]] := Module[{row, heights, colorRules}, 
+    {row, heights} = LambdaArrayRowDepths[lambda];
+	{row, heights} = Take[#, UpTo[max]] & /@ {row, heights};
+	colorRules = Flatten[{OptionValue[ColorRules], $ColorArrayColors}];
+    ArrayPlot[
+		Prepend[Table[MapThread[If[#2 >= i, #1, -3] &, {row, heights}], {i, 1, Max[heights]}], row],
+      	FilterRules[{opts}, Options[ArrayPlot]],
+		ColorRules -> Append[
+			colorRules,
+			x_ :> Blend[Lookup[colorRules, {"MinVar", "MaxVar"}], Rescale[x, {1, Max[row, 1]}]]
+		],
+	  	Mesh -> Automatic
+	]
+]
+
+Options[LambdaDepthArrayPlot3D] = Join[{
+	ColorRules -> $ColorArrayColors
+},
+	Options[ArrayPlot3D]
+]
+
+LambdaDepthArrayPlot3D[lambdas : {__}, max : _Integer | Automatic : Automatic, opts : OptionsPattern[]] := Block[{rows, heights, colorRules}, 
+    {rows, heights} = Thread[LambdaArrayRowDepths /@ lambdas];
+	colorRules = Flatten[{OptionValue[ColorRules], $ColorArrayColors}];
+    ArrayPlot3D[
+		Transpose @ Take[
+			MapThread[
+				Prepend[Table[MapThread[If[#2 >= i, #1, -3] &, {##}], {i, 1, Max[#2]}], #1] &,
+				{rows, heights}
+			],
+			All, All, UpTo[Replace[max, Automatic :> Max[Length /@ rows]]]
+		],
+		FilterRules[{opts}, Options[ArrayPlot3D]], 
+		ColorRules -> Append[
+			colorRules,
+			x_ :> Blend[Lookup[colorRules, {"MinVar", "MaxVar"}], Rescale[x, {1, Max[rows, 1]}]]
+		],
+		AspectRatio -> 1 / 4
 	]
 ]
 

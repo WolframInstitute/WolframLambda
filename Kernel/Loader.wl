@@ -15,4 +15,4 @@ Enclose[
     Get["StringDiagram.wl"]
 ]
 
-End[]
+End[];

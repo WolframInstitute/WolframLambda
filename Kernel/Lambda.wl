@@ -913,18 +913,19 @@ LambdaBrackets[lambda_, ___] := RawBoxes[ToBoxes[LambdaApplication[lambda]] /. T
 lambdaStringVariables[lambda_] := lambda //. {
    	Interpretation[$LambdaHead, var_][body_] :> StringTemplate["(\[Lambda]``.``)"][ToString[Unevaluated[var]], lambdaStringVariables[body]],
 	Interpretation[_, var_] :> ToString[Unevaluated[var]],
-	f_[x_] :> Function[StringTemplate[If[StringEndsQ[#1, ")"] || StringStartsQ[#2, "("], "(````)", "(`` ``)"]][##]][lambdaStringVariables[f], lambdaStringVariables[x]]
+	f_[x_] :> Function[StringTemplate[If[StringEndsQ[#1, ")"] || StringStartsQ[#2, "("], "(````)", "(``\[InvisibleSpace]``)"]][##]][lambdaStringVariables[f], lambdaStringVariables[x]]
 }
 
 lambdaStringIndices[lambda_] := lambda //. {
-   	$LambdaHead[body_] :> StringTemplate["(\[Lambda] ``)"][lambdaStringIndices[body]],
-	f_[x_] :> StringTemplate["(`` ``)"][lambdaStringIndices[f], lambdaStringIndices[x]]
+   	$LambdaHead[body_] :> StringTemplate["(\[Lambda]\[InvisibleSpace]``)"][lambdaStringIndices[body]],
+	f_[x_] :> StringTemplate["(``\[InvisibleSpace]``)"][lambdaStringIndices[f], lambdaStringIndices[x]]
 }
 
 LambdaString[lambda_, "Indices"] := lambdaStringIndices[UntagLambda[lambda]]
 LambdaString[lambda_, _ : "Variables"] := lambdaStringVariables[TagLambda[lambda]]
+LambdaString[lambda_, "Brackets"] := StringReplace[ToString[DisplayForm[ToBoxes[LambdaBrackets[lambda]]]], WhitespaceCharacter .. -> "\[InvisibleSpace]"]
 
-ResourceFunction["AddCodeCompletion"]["LambdaString"][None, {"Variables", "Indices"}]
+ResourceFunction["AddCodeCompletion"]["LambdaString"][None, {"Variables", "Indices", "Brackets"}]
 
 
 LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
@@ -972,8 +973,14 @@ ResourceFunction["AddCodeCompletion"]["LambdaConvert"][None,
 BalancedParenthesesQ[str_] := FixedPoint[StringDelete["()"], StringDelete[str, Except["(" | ")"]]] === ""
 
 ParseVariableLambda[str_String, vars_Association : <||>] := First @ StringCases[str, {
-	WhitespaceCharacter ... ~~ "\[Lambda]" ~~ WhitespaceCharacter ... ~~ var : WordCharacter .. ~~ WhitespaceCharacter ... ~~ "." ~~ WhitespaceCharacter ... ~~ body__ :>
-		Interpretation["\[Lambda]", var][ParseVariableLambda[body, <|vars + 1, var -> 1|>]],
+	WhitespaceCharacter ... ~~ "\[Lambda]" ~~ WhitespaceCharacter ... ~~ args : Repeated[WordCharacter .. ~~ WhitespaceCharacter ...] ~~ "." ~~ WhitespaceCharacter ... ~~ body__ :>
+		With[{argVars = Reverse @ StringCases[args, WordCharacter ..]}, {len = Length[argVars]},
+			Fold[
+				ReverseApplied[Construct],
+				ParseVariableLambda[body, <|vars + len, Thread[argVars -> Range[len]]|>],
+				Interpretation["\[Lambda]", #] & /@ argVars
+			]
+		],
 	f__ ~~ WhitespaceCharacter ... ~~ x__ /; ! StringMatchQ[x, WhitespaceCharacter ..] &&
 		! StringEndsQ[f, ("\[Lambda]" | ".") ~~ WhitespaceCharacter ...] && ! StringStartsQ[x, "."] && ! StringEndsQ[x, ("\[Lambda]" | ".") ~~ WhitespaceCharacter ...] &&
 		BalancedParenthesesQ[f] && BalancedParenthesesQ[x] :> ParseVariableLambda[f, vars][ParseVariableLambda[x, vars]],
@@ -993,11 +1000,13 @@ ParseLambda[str_String, form_String : "Variables"] := Switch[form,
 	ParseVariableLambda[str],
 	"Indices",
 	ParseIndexLambda[str],
+	"Brackets" | "BracketParens",
+	ParseIndexLambda[StringReplace[str, {"[" -> "(\[Lambda]", "]" -> ")"}]],
 	_,
 	Missing[form]
 ]
 
-ResourceFunction["AddCodeCompletion"]["ParseLambda"][None, {"Variables", "Indices"}]
+ResourceFunction["AddCodeCompletion"]["ParseLambda"][None, {"Variables", "Indices", "Brackets"}]
 
 
 LambdaBLC[lambda_, ___] := lambda /. {

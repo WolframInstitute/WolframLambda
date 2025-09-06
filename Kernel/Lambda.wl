@@ -95,7 +95,7 @@ If[ ! ValueQ[$Lambda],
 Begin["`Private`"];
 
 
-$LambdaHead = $Lambda | "\[Lambda]" | Style["\[Lambda]", ___]
+$LambdaHead = $Lambda | Global`\[Lambda] | "\[Lambda]" | Style["\[Lambda]", ___]
 
 $LambdaPattern = $LambdaHead | Interpretation["\[Lambda]" | Style["\[Lambda]", ___], _]
 
@@ -563,7 +563,7 @@ ClosedLambdaQ[lambda_] := LambdaFreeVariables[lambda] === {}
 
 
 tagLambda[tag_] := Interpretation["\[Lambda]", tag]
-tagLambda[e_, tag_] := If[e === $Lambda, Interpretation["\[Lambda]", tag], Interpretation[e, tag]]
+tagLambda[e_, tag_] := If[MatchQ[e, $LambdaHead], Interpretation["\[Lambda]", tag], Interpretation[e, tag]]
 
 TagLambda[expr_, lambdas_Association] := With[{
 	nextLambdas = KeyMap[# + 1 &] @ lambdas
@@ -609,12 +609,13 @@ LambdaFunction[expr_, head_ : Identity] := head @@ (Hold[Evaluate @ TagLambda[ex
 
 
 FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
+	_Interpretation | _Integer -> expr,
 	Style[($LambdaHead | Function), style___][Style[HoldForm[var_] | var_, ___], body_][x_] :> Interpretation[Style["\[Lambda]", style], var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, HoldForm[var] -> 1]]][FunctionLambda[Unevaluated[x], vars]],
 	Style[($LambdaHead | Function), style___][Style[HoldForm[var_] | var_, ___], body_] :> Interpretation[Style["\[Lambda]", style], var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, HoldForm[var] -> 1]]],
 	($LambdaHead | Function)[HoldForm[var_] | var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, HoldForm[var] -> 1]]][FunctionLambda[Unevaluated[x], vars]],
 	($LambdaHead | Function)[HoldForm[var_] | var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, HoldForm[var] -> 1]]],
-	HoldForm[var : Except[$Lambda, _Symbol]] | (var : Except[$Lambda, _Symbol]) :> Interpretation[Evaluate[Replace[HoldForm[var], vars]], var],
-	f_[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]]
+	(f : Except[HoldForm])[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
+	HoldForm[var : Except[$LambdaHead]] | (var : Except[$LambdaHead]) :> Interpretation[Evaluate[Replace[HoldForm[var], vars]], var]
 }]
 
 
@@ -860,7 +861,7 @@ TreeNodeCoordinates[tree_] := Thread[
 Options[LambdaLoopbackGraph] = Join[Options[LambdaTree], Options[Graph]]
 
 LambdaLoopbackGraph[lambda_, opts : OptionsPattern[]] := Block[{
-	tree = LambdaTree[TagLambda[lambda], FilterRules[{opts}, Options[LambdaTree]]],
+	tree = LambdaTree[TagLambda[lambda], FilterRules[{opts}, Options[LambdaTree]], TreeElementLabelStyle -> "Leaves" -> Transparent],
 	colorRules = Join[Cases[Flatten[{OptionValue[ColorRules]}], _Rule | _RuleDelayed], Lookup[Options[LambdaTree], ColorRules]],
 	g, coords, rules
 },
@@ -937,7 +938,7 @@ LambdaConvert[expr_, form_String : "Application", args___] := Switch[form,
 	LambdaRightApplication[expr, args],
 	"VariableForm" | "StandardForm",
 	LambdaVariableForm[expr, args],
-	"BracketParens",
+	"BracketParens" | "Brackets",
 	LambdaBrackets[expr, args],
 	"Function",
 	LambdaFunction[expr, args],
@@ -1090,7 +1091,7 @@ LambdaSmiles[lambda_, opts : OptionsPattern[]] := Block[{
 		] &,
 		row
 	];
-	lambdaPos = Position[row, _$Lambda -> _, {1}, Heads -> False];
+	lambdaPos = Position[row, $LambdaHead[_] -> _, {1}, Heads -> False];
 	varPos = Position[row, _Integer -> _, {1}, Heads -> False];
 	argPos = Position[row, "Arg"[_] -> _, {1}, Heads -> False];
 	lambdas = AssociationThread[#[[All, 1, 1]], Thread[First /@ lambdaPos -> #[[All, 2]]]] & @ Extract[row, lambdaPos];
@@ -1816,8 +1817,8 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 ]
 
 
-lambdaArrayRow[lambda_] := Replace[lambda, {$Lambda -> {0}, {x_, xs__} :> Join[lambdaArrayRow[x], Catenate[Join[{-1}, lambdaArrayRow[#], {-2}] & /@ {xs}]], x_ :> {x}}]
-LambdaArrayRow[lambda_] := lambdaArrayRow @ LambdaRow[lambda]
+lambdaArrayRow[lambda_] := Replace[lambda, {$LambdaHead -> {0}, {x_, xs__} :> Join[lambdaArrayRow[x], Catenate[Join[{-1}, lambdaArrayRow[#], {-2}] & /@ {xs}]], x_ :> {x}}]
+LambdaArrayRow[lambda_] := lambdaArrayRow @ LambdaRow[UntagLambda[lambda]]
 
 $ColorArrayColors = {0 -> Hue[0.87, 1, 1], -1 -> GrayLevel[.8], -2 -> GrayLevel[.5], "MinVar" -> Hue[0.66, 1, 1.], "MaxVar" -> Hue[0.51, 1, 1]}
 

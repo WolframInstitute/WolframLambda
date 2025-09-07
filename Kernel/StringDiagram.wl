@@ -21,7 +21,7 @@ ConnectCurves[curves_, eps_ : 1*^-4] := Block[{g},
 ]
 
 SmoothPoints[points_, n : _ ? NumericQ : .5, m : _Integer?Positive : 5] /; 0 <= n <= 1 := With[
-    {len = Length[points]}, {k = Round[n (len - 2) + 1]},
+    {len = Length[points]}, {k = Round[n * (len - 2) + 1]},
     {if = Interpolation[Thread[{Subdivide[len - k], Prepend[First[points]] @ Append[Last[points]] @ MovingAverage[points, k][[2 ;; -2]]}], InterpolationOrder -> 2]},
     BSplineCurve[if /@ Subdivide[m]]
 ]

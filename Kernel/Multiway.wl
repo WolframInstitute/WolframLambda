@@ -43,7 +43,7 @@ LambdaMultiwayGraph[lambda_, t_Integer : 1 , m : _Integer | Infinity : Infinity,
 		FilterRules[{opts}, Options[Graph]],
 		VertexShapeFunction -> Map[With[{highlightedQ = ! MatchQ[highlightStyle, False | None] && MemberQ[highlightNodes, #]},
 			# -> Replace[OptionValue["VertexShape"], {
-				"Expression" | {"Expression", typeOpts : OptionsPattern[]} -> With[{background = If[highlightedQ, highlightStyle1, None]},
+				"Expression" | {"Expression", typeOpts : OptionsPattern[]} :> With[{background = If[highlightedQ, highlightStyle1, None]},
 					If[	highlightedQ,
 						Function[Inset[Text @ Framed[Style[If[variablesQ, LambdaVariableForm[LambdaUntag[#2]], LambdaForm[#2]], 200 * #3, typeOpts, FontColor -> $Black], BaseStyle -> Background -> highlightStyle1, FrameMargins -> 0], #1]],
 						Function[ResourceFunction["WolframPhysicsProjectStyleData"]["StatesGraph", "VertexShapeFunction"][

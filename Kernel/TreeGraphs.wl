@@ -229,7 +229,7 @@ LambdaGraph[tree_Tree, opts : OptionsPattern[]] := Block[{
 		FilterRules[{opts}, Options[Graph]],
 		VertexCoordinates -> MapAt[Replace[rules], coords, {All, 1}],
 		FormatType -> StandardForm,
-		PerformanceGoal -> "Quality"
+		PerformanceGoal -> "Quality",
 		GraphLayout -> "SymmetricLayeredEmbedding"
 	]
 ]
@@ -268,7 +268,7 @@ LambdaLoopbackGraph[tree_Tree, opts : OptionsPattern[]] := Block[{
 		},
 		VertexCoordinates -> coords,
 		FormatType -> StandardForm,
-		PerformanceGoal -> "Quality"
+		PerformanceGoal -> "Quality",
 		GraphLayout -> "SymmetricLayeredEmbedding"
 	]
 ]

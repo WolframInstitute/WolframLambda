@@ -4,8 +4,11 @@
 (* ============================= *)
 
 
-BeginPackage["Wolfram`Lambda`EntityStore`", "Wolfram`Lambda`"]
+BeginPackage["Wolfram`Lambda`"]
 
+ClearAll[
+    $LambdaCombinatorStore
+]
 
 Begin["`Private`"]
 
@@ -732,7 +735,7 @@ entitiesAssoc = Association @ Map[
    allEntities
 ];
 
-lambdaCombinatorStore = EntityStore[
+$LambdaCombinatorStore = EntityStore[
     "LambdaCombinator" -> <|
       "Label" -> "Lambda Combinator",
       "Entities" -> entitiesAssoc,
@@ -742,7 +745,7 @@ lambdaCombinatorStore = EntityStore[
 
 EntityUnregister["LambdaCombinator"]
 
-EntityRegister[lambdaCombinatorStore];
+EntityRegister[$LambdaCombinatorStore];
 
 End[];
 

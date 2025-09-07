@@ -593,7 +593,10 @@ decl = {
 }
 
 $CompiledFunctions := $CompiledFunctions = Enclose[
-    ConfirmBy[Once[CloudGet["https://www.wolframcloud.com/obj/nikm/CompiledLambdaFunctions"]], AssociationQ],
+    ConfirmBy[
+		CloudExpression["https://www.wolframcloud.com/obj/nikm/CloudExpression/LambdaCompiledFunctions"],
+		Information[#, "FileHashMD5"] === 281949768489412648962353822266799178366 &
+	],
     FunctionCompile	[decl, <|
         "BetaReduce" -> betaReduce,
         "BetaReduceApplicative" -> betaReduceApplicative,
@@ -630,17 +633,19 @@ $CompiledFunctions := $CompiledFunctions = Enclose[
 	|>, TargetSystem -> Automatic] &
 ]
 
+GetCompiledFunction[name_String] := Once[$CompiledFunctions[name]]
+
 $ReduceFunction = "BetaReduce" | "BetaReduceInner" | "BetaReduceApplicative" | "BetaReduceIterative" | "BetaReduceInnerIterative" | "BetaReduceApplicativeIterative"
 $SizeFunction = "LeafCount" | "BLCsize" | "LeafCountIterative" | "BLCsizeIterative"
 
 BetaReduceCompiled[expr_, n : _Integer : Infinity, reduce : $ReduceFunction : "BetaReduce"] :=
-    NestWhile[$CompiledFunctions[reduce][#[[1]]] &, {expr /. $LambdaHead -> \[FormalLambda], True}, #[[2]] &, 1, n][[1]]
+    NestWhile[GetCompiledFunction[reduce][#[[1]]] &, {expr /. $LambdaHead -> \[FormalLambda], True}, #[[2]] &, 1, n][[1]]
 
 BetaReduceListCompiled[expr_, n : _Integer | Infinity : Infinity, reduce : $ReduceFunction : "BetaReduce"] :=
-    NestWhileList[$CompiledFunctions[reduce][#[[1]]] &, {expr /. $LambdaHead -> \[FormalLambda], True}, #[[2]] &, 1, n][[All, 1]]
+    NestWhileList[GetCompiledFunction[reduce][#[[1]]] &, {expr /. $LambdaHead -> \[FormalLambda], True}, #[[2]] &, 1, n][[All, 1]]
 
 BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : UpTo[2 ^ ($SystemWordLength - 1) - 1], reduce : $ReduceFunction : "BetaReduce", size : $SizeFuntcion : "LeafCountIterative"] :=
-    $CompiledFunctions["BetaReduceSizes"][expr /. $LambdaHead -> \[FormalLambda], n, $CompiledFunctions[size], $CompiledFunctions[reduce]]
+    GetCompiledFunction["BetaReduceSizes"][expr /. $LambdaHead -> \[FormalLambda], n, GetCompiledFunction[size], GetCompiledFunction[reduce]]
 
 ResourceFunction["AddCodeCompletion"]["BetaReduceCompiled"][None, None, List @@ $ReduceFunction]
 ResourceFunction["AddCodeCompletion"]["BetaReduceListCompiled"][None, None, List @@ $ReduceFunction]

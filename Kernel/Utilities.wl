@@ -8,7 +8,7 @@ NestWhilePairList[f_, expr_, test_, m_Integer : 1, max : _Integer | Infinity : I
 			If[i >= max || Length[args] == m && ! ConfirmBy[test @@ args, BooleanQ], Break[]];
 			Replace[f @@ args,
 			{
-				pair : {_, next_} :> (AppendTo[list, g[pair]]; If[i++ >= m, args = Rest[args]]; args = Append[args, next];),
+				pair : {_, next_} :> (AppendTo[list, g[pair]]; If[++i >= m, args = Rest[args]]; args = Append[args, next];),
 				_ :> Break[]
 			}];
 		];

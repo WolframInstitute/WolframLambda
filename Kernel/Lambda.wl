@@ -60,9 +60,9 @@ BetaNormalQ[expr_] := FreeQ[expr, $LambdaPattern[_][_]]
 
 
 $LambdaStyles = <|
-	"Lambda" -> Hue[0.8174603174603176, 0.20999999999999996`, 1.], 
-   	"BrighterLambda" -> Hue[0.833, 0.622, 0.9570000000000001], 
-   	"DebruijnIndex" -> Hue[0.576923076923077, 0.13, 1., 1.], 
+	"Lambda" -> Hue[0.82, 0.5, 1.], 
+   	"BrighterLambda" -> Hue[0.833, 0.622, 0.957], 
+   	"DebruijnIndex" -> Hue[0.58, 0.5, 1.], 
    	"DebruijnIndexBorder" -> RGBColor[0.276768, 0.66747216, 0.72075, 1], 
    	"BrighterDebruijnIndex" -> Hue[0.52, 0.616, 0.961], 
    	"Application" -> GrayLevel[0.9, 1], 
@@ -78,7 +78,7 @@ $LambdaStyles = <|
 	"Labels" -> Black
 |>
 
-$LambdaTreeColorRules = Join[
+$LambdaTreeColorRules := Join[
 	{
 		"Lambda" -> Directive[$LambdaStyles["Lambda"], EdgeForm[$LambdaStyles["BrighterLambda"]]],
 		"Application" -> Directive[$LambdaStyles["Application"], EdgeForm[$LambdaStyles["ApplicationBorder"]]],

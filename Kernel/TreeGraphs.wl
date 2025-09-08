@@ -39,9 +39,9 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 	taggedLambda = FunctionLambda[lambda];
 	If[taggedLambda =!= lambda, variablesQ = True, taggedLambda = TagLambda[taggedLambda]];
 	Block[{tree, colors = {}, lambdaColor, appColor, leaveColor, applicationPositions, redexPositions},
-		lambdaColor = Replace["Lambda", colorRules];
+		lambdaColor = Replace[Switch[theme, "Minimal", "MinimalLambda", _, "Lambda"], colorRules];
 		appColor = Replace["Application", colorRules];
-		leaveColor = Replace[If[variablesQ, "Variable", "Index"], colorRules];
+		leaveColor = Replace[If[variablesQ, "Variable", Switch[theme, "Minimal", "MinimalIndex", _, "Index"]], colorRules];
 		tree = lambdaTree[
 			ColorizeLambda[taggedLambda, FilterRules[{opts}, Options[ColorizeLambda]]] /.
 				Interpretation[Style[e_, style__], tag_] :>
@@ -113,7 +113,7 @@ LambdaTree[lambda_, opts : OptionsPattern[]] := Block[{
 							colors,
 						_,
 							{
-								TreeCases[$LambdaPattern] -> Replace["Lambda", colorRules],
+								TreeCases[$LambdaPattern] -> lambdaColor,
 								"Leaves" -> leaveColor
 							}
 					]
@@ -264,7 +264,8 @@ LambdaLoopbackGraph[tree_Tree, opts : OptionsPattern[]] := Block[{
 				( BSplineCurve[Insert[{First[#1], Last[#1]}, (Total @ {First[#1], Last[#1]}) / 2 + {If[#1[[1, 1]] > #1[[-1, 1]], 1, -1], 0}, 2]] &)
 		},
 		EdgeStyle -> {
-			DirectedEdge[{_Interpretation, _}, _] -> $LambdaStyles["LoopbackEdges"]
+			DirectedEdge[{_Interpretation, _}, _] -> $LambdaStyles["LoopbackEdges"],
+			_ -> Inherited
 		},
 		VertexCoordinates -> coords,
 		FormatType -> StandardForm,
@@ -304,7 +305,7 @@ If[ events === {},
 			FilterRules[{opts}, Options[Graph]],
 			VertexStyle -> ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "VertexStyle"],
 			VertexLabels -> DirectedEdge[lam1_, lam2_, t_ -> pos_]:> Row[{t, ":", Row[pos], ":", LambdaTag @ LambdaUntag[Extract[lam1, {pos}][[1]]]}],
-			EdgeStyle -> LightDarkSwitched[ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "EdgeStyle"], StandardRed],
+			EdgeStyle -> Directive[Arrowheads[Small], LightDarkSwitched[ResourceFunction["WolframPhysicsProjectStyleData"]["CausalGraph", "EdgeStyle"], StandardRed]],
 			VertexLabels -> Placed[Automatic, Tooltip],
 			GraphLayout -> "LayeredDigraphEmbedding"
 		]

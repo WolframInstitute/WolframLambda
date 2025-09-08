@@ -60,9 +60,11 @@ BetaNormalQ[expr_] := FreeQ[expr, $LambdaPattern[_][_]]
 
 
 $LambdaStyles = <|
-	"Lambda" -> Hue[0.82, 0.5, 1.], 
+	"Lambda" -> Hue[0.8174603174603176, 0.20999999999999996`, 1.], 
+   	"DebruijnIndex" -> Hue[0.576923076923077, 0.13, 1., 1.], 
+	"MinimalLambda" -> Hue[0.82, 0.5, 1.], 
+   	"MinimalDebruijnIndex" -> Hue[0.58, 0.5, 1.], 
    	"BrighterLambda" -> Hue[0.833, 0.622, 0.957], 
-   	"DebruijnIndex" -> Hue[0.58, 0.5, 1.], 
    	"DebruijnIndexBorder" -> RGBColor[0.276768, 0.66747216, 0.72075, 1], 
    	"BrighterDebruijnIndex" -> Hue[0.52, 0.616, 0.961], 
    	"Application" -> GrayLevel[0.9, 1], 
@@ -81,16 +83,17 @@ $LambdaStyles = <|
 $LambdaTreeColorRules := Join[
 	{
 		"Lambda" -> Directive[$LambdaStyles["Lambda"], EdgeForm[$LambdaStyles["BrighterLambda"]]],
+		"MinimalLambda" -> Directive[$LambdaStyles["MinimalLambda"], EdgeForm[$LambdaStyles["BrighterLambda"]]],
 		"Application" -> Directive[$LambdaStyles["Application"], EdgeForm[$LambdaStyles["ApplicationBorder"]]],
 		"Index" -> Directive[$LambdaStyles["DebruijnIndex"], EdgeForm[$LambdaStyles["DebruijnIndexBorder"]]],
+		"MinimalIndex" -> Directive[$LambdaStyles["MinimalDebruijnIndex"], EdgeForm[$LambdaStyles["DebruijnIndexBorder"]]],
 		"Variable" -> Directive[$LambdaStyles["VariableArgument"], EdgeForm[Darker[$LambdaStyles["BrighterVariableArgument"], .1]]]
 	}
 	,
 	Normal[$LambdaStyles]
 ]
 
-$LambdaGridStyleRules = {Background -> {{GrayLevel[0.93]}, Automatic}, ItemStyle -> {{Italic}, Automatic}, Frame -> All, FrameStyle -> GrayLevel[0.75], Spacings -> {.75, .6}}
-
+$LambdaGridStyleRules = {Background -> {{GrayLevel[0.93], {GrayLevel[0.98]}}}, ItemStyle -> {{Italic}, Automatic}, Frame -> All, FrameStyle -> GrayLevel[0.75], Spacings -> {.75, .6}}
 
 LambdaCombinator[expr_, ruleSpec_String : "SK"] := Block[{T, rules = Characters[ruleSpec]},
 	T[x_] := x;
@@ -236,7 +239,7 @@ LambdaVariableForm[lambda_, ___] := TagLambda[lambda] //. {
 	Interpretation[_Integer, tag_] :> HoldForm[tag]
 }
 
-LambdaRightApplication[lambda_, sym_ : "@", ___] :=
+LambdaRightApplication[lambda_, sym_ : " @ ", ___] :=
 	lambda //. (x : Except[$LambdaPattern | Row])[y_] :> Row[{x, sym, y}] //.
 		Row[{prefix : Except[sym] ..., Row[{a__, sym, b__}], c__}] :> Row[{prefix, "(", a, sym, b, ")", c}]
 

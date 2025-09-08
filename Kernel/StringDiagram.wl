@@ -36,26 +36,36 @@ SmoothGraphicsCurves[g_, n : _ ? NumericQ : .5, m : _Integer ? Positive : 5, opt
     Show[Graphics[{OptionValue["WireStyle"], Haloing[], Arrow @ SmoothPoints[#, n, m]} & /@ ConnectCurves[curves]], h, FilterRules[{opts}, Options[Graphics]]]
 ]
 
-Options[LambdaStringDiagram] = Join[Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram], Options[DiagramArrange], Options[SmoothGraphicsCurves]]
+Options[LambdaStringDiagram] = Join[{"LambdaSize" -> .33}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram], Options[DiagramArrange], Options[SmoothGraphicsCurves]]
 
-LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := 
-    DiagramArrange @ DiagramArrange[
+LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{lambdaSize = OptionValue["LambdaSize"]},
+    DiagramArrange[
         ToDiagram[TagLambda[lambda], FilterRules[{opts}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram]]],
         FilterRules[{opts}, Options[DiagramArrange]],
         "LoopDiagrams" -> False, "WireLabels" -> False, "Rotate" -> Top, 
-        "Frames" -> False, Alignment -> Center, Dividers -> False, 
-        ImageSize -> {Automatic, 256}
-    ] // DiagramMap[
+        Alignment -> Center, Dividers -> False,
+        "RowSort" -> True, Direction -> Up,
+        ImageSize -> {Automatic, imageSize}
+    ] // (d |-> DiagramMap[
         Diagram[#, "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"],
-            If[MatchQ[#["Name"], HoldForm[""]], {"Shape" -> "Triangle", "Style" -> StandardPurple, "Width" -> 1, "Height" -> 1}, {}]
-        ] &
-    ]
+            Switch[#["Name"],
+                HoldForm[""],
+                {"Shape" -> "Triangle", "Style" -> StandardPurple, "Width" -> 1, "Height" -> 1},
+                HoldForm[Style[Subscript["\[Lambda]", _], ___]],
+                With[{size = lambdaSize DiagramGridHeight[d]}, {"Width" -> size / GoldenRatio, "Height" -> size}],
+                _,
+                {}
+            ]
+        ] &,
+        d
+    ])
+]
 
 Options[SmoothLambdaStringDiagram] = Options[SmoothGraphicsCurves]
 
 SmoothLambdaStringDiagram[lambda_, n : _ ? NumericQ : .1, m : _Integer ? Positive : 5, opts : OptionsPattern[]] /; 0 <= n <= 1 := 
     SmoothGraphicsCurves[
-        DiagramGrid @ LambdaStringDiagram[lambda, FilterRules[{opts}, Options[LambdaStringDiagram]]], n, m,
+        DiagramGrid[LambdaStringDiagram[lambda, FilterRules[{opts}, Options[LambdaStringDiagram]]], PlotInteractivity -> False], n, m,
         FilterRules[{opts}, Options[SmoothGraphicsCurves]]
     ] /. {Arrow[{p1_, p2_}] :> Arrow[{p1, p2 + Normalize[p2 - p1]}]}
 

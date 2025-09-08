@@ -327,10 +327,11 @@ $LambdaDiagramColorRules = {
 }
 
 Options[LambdaDiagram] = Join[{
-	"Dynamic" -> False, "Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False,
+	"Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False,
 	"Labeled" -> False, "Colored" -> False,
 	"Alternative" -> False,
-	ColorRules -> Automatic
+	ColorRules -> Automatic,
+	PlotInteractivity -> False
 },
 	Options[Graphics]
 ];
@@ -431,6 +432,8 @@ LambdaDiagram[expr_, depths_Association, extend_ ? BooleanQ, pad_ ? BooleanQ, th
 
 
 LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
+	interactiveQ = TrueQ[OptionValue[PlotInteractivity]],
+	tooltip,
 	makeTooltip = Function[{pos, type},
 		type -> MapAt[Framed, {pos}] @ If[StringEndsQ[type, "Application"],
 			MapAt[Style[#, $Blue] &, Append[pos, 1]] @* MapAt[Style[#, $Red] &, Append[pos, 0]],
@@ -443,6 +446,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	alternative = TrueQ[OptionValue["Alternative"]],
 	labeled = OptionValue["Labeled"]
 },
+	tooltip = If[TrueQ[OptionValue[PlotInteractivity]], Tooltip, #1 &];
 	With[{typeColorFunction =
 		If[ TrueQ[OptionValue["Colored"]],
 			Replace[colorRules],
@@ -459,7 +463,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 					{x_, {y_, z_}} :> {{x - 1 / 4, y - 1 / 4}, {x + 1 / 4, z - 1 / 4}}
 				}]}
 			],
-			Function[{AbsoluteThickness[1.5], typeColorFunction[#3], Line[Thread[#1]]}]
+			Function[{typeColorFunction[#3], Line[Thread[#1]]}]
 		]
 	];
 	pointFunction = If[TrueQ[OptionValue["Thick"]],
@@ -503,31 +507,31 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	dots = Switch[OptionValue["Dots"],
 		All,
 		{
-			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> type_] :> Tooltip[pointFunction[{x, y}, type], makeTooltip[pos, type]]]
+			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> type_] :> tooltip[pointFunction[{x, y}, type], makeTooltip[pos, type]]]
 		},
 		True | Automatic,
 		{
-			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> Tooltip[pointFunction[{x, y}, "Lambda"], makeTooltip[pos, "Lambda"]]]
+			Cases[lines, Labeled[{{x_, _}, y_}, pos_ -> "Lambda"] :> tooltip[pointFunction[{x, y}, "Lambda"], makeTooltip[pos, "Lambda"]]]
 		},
 		False | None,
 		Nothing
 	];
-	If[ TrueQ[OptionValue["Dynamic"]]
+	If[ interactiveQ
 		,
 		With[{boxId = Unique[Symbol["LambdaDiagram"]]},
-			DynamicModule[{style = ConstantArray[Thickness[Medium], Length[lines]]},
+			DynamicModule[{style = ConstantArray[AbsoluteThickness[1.5], Length[lines]]},
 				Graphics[{
 					MapIndexed[With[{i = #2[[1]], f = lineFunction},
 						Replace[#1, Labeled[line_, pos_ -> type_] :> With[{
 							primitive = {
-								Tooltip[Dynamic @ {If[type === "LambdaApplication", Directive[Dashed, AbsoluteThickness[3]], Nothing], style[[i]], f[line, pos, type]}, makeTooltip[pos, type]],
+								tooltip[Dynamic @ {If[type === "LambdaApplication", Dashed, Nothing], style[[i]], f[line, pos, type]}, makeTooltip[pos, type]],
 								labelFunction[line, pos, type]
 							}
 						},
 							EventHandler[primitive,
 								{
-									"MouseEntered" :> If[ListQ[style], style[[i]] = Thickness[Large]],
-									"MouseExited" :> If[ListQ[style], style[[i]] = Thickness[Medium]],
+									"MouseEntered" :> If[ListQ[style], style[[i]] = AbsoluteThickness[3]],
+									"MouseExited" :> If[ListQ[style], style[[i]] = AbsoluteThickness[1.5]],
 									If[	type === "LambdaApplication",
 										"MouseClicked" :> MathLink`CallFrontEnd[FrontEnd`BoxReferenceReplace[FE`BoxReference[EvaluationNotebook[], boxId],
 											ToBoxes[LambdaDiagram[MapAt[BetaSubstitute, expr, {pos}], opts]]]
@@ -550,7 +554,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		,
 		Graphics[{
 			Replace[lines,
-				Labeled[line_, pos_ -> type_] :> Tooltip[lineFunction[line, pos, type], makeTooltip[pos, type]],
+				Labeled[line_, pos_ -> type_] :> tooltip[{AbsoluteThickness[1.5], lineFunction[line, pos, type]}, makeTooltip[pos, type]],
 				1
 			],
 			dots,

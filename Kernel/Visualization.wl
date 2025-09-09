@@ -319,7 +319,7 @@ LambdaDepthArrayPlot3D[lambdas : {__}, max : _Integer | Automatic : Automatic, o
 
 
 $LambdaDiagramColorRules = {
-   	"Lambda" -> Replace["Lambda", $LambdaTreeColorRules],
+   	"Lambda" -> Directive[EdgeForm[$LambdaStyles["BrighterLambda"]], $LambdaStyles["BrighterLambda"]],
    	"Application" | "LambdaApplication" -> Replace["Application", $LambdaTreeColorRules],
    	"Term" -> $Gray,
    	"Variable" | "FreeVariable" | "Constant" -> Replace["Variable", $LambdaTreeColorRules],
@@ -327,11 +327,14 @@ $LambdaDiagramColorRules = {
 }
 
 Options[LambdaDiagram] = Join[{
-	"Extend" -> True, "Pad" -> True, "Dots" -> All, "Thick" -> False,
+	"Extend" -> True, "Pad" -> True,
+	"Dots" -> All, "DotSize" -> Automatic,
+	"Thick" -> False,
 	"Labeled" -> False, "Colored" -> False,
 	"Alternative" -> False,
 	ColorRules -> Automatic,
-	PlotInteractivity -> False
+	PlotInteractivity -> False,
+	"Tooltips" -> False
 },
 	Options[Graphics]
 ];
@@ -444,16 +447,17 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	colorRules = Replace[OptionValue[ColorRules], {Automatic -> $LambdaDiagramColorRules, rules_  :> Join[Cases[Flatten[{rules}], _Rule | _RuleDelayed], $LambdaDiagramColorRules]}],
 	lineFunction, pointFunction, labelFunction,
 	alternative = TrueQ[OptionValue["Alternative"]],
-	labeled = OptionValue["Labeled"]
+	labeled = OptionValue["Labeled"],
+	thickQ = TrueQ[OptionValue["Thick"]]
 },
-	tooltip = If[TrueQ[OptionValue[PlotInteractivity]], Tooltip, #1 &];
+	tooltip = If[TrueQ[OptionValue["Tooltips"]], Tooltip, #1 &];
 	With[{typeColorFunction =
 		If[ TrueQ[OptionValue["Colored"]],
 			Replace[colorRules],
 			Function[$Gray]
 		]
 	},
-		lineFunction = If[TrueQ[OptionValue["Thick"]],
+		lineFunction = If[thickQ,
 			Function[{
 				typeColorFunction[#3],
 				Rectangle @@ Replace[#1, {
@@ -466,9 +470,8 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 			Function[{typeColorFunction[#3], Line[Thread[#1]]}]
 		]
 	];
-	pointFunction = If[TrueQ[OptionValue["Thick"]],
-		Function[{Replace[#2, colorRules], Disk[#1, 1 / 4]}],
-		Function[{Replace[#2, colorRules], Disk[#1, 1 / 8]}]
+	pointFunction = With[{dotSize = Replace[OptionValue["DotSize"], Automatic :> If[thickQ, 1 / 4, 1 / 8]]},
+		Function[{Replace[#2, colorRules], Disk[#1, dotSize]}]
 	];
 	labelFunction = Switch[labeled,
 		True, 
@@ -499,7 +502,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 	lines = SortBy[
 		LambdaDiagram[lambda, depths,
 			TrueQ[OptionValue["Extend"]], TrueQ[OptionValue["Pad"]],
-			TrueQ[OptionValue["Thick"]],
+			thickQ,
 			TrueQ[OptionValue["Alternative"]]
 		][[2]],
 		MatchQ[Labeled[_, _ -> "LambdaApplication" | "Term"]]
@@ -554,7 +557,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 		,
 		Graphics[{
 			Replace[lines,
-				Labeled[line_, pos_ -> type_] :> tooltip[{AbsoluteThickness[1.5], lineFunction[line, pos, type]}, makeTooltip[pos, type]],
+				Labeled[line_, pos_ -> type_] :> tooltip[{AbsoluteThickness[1.5], Splice @ lineFunction[line, pos, type]}, makeTooltip[pos, type]],
 				1
 			],
 			dots,
@@ -572,7 +575,7 @@ LambdaDiagram[expr_, opts : OptionsPattern[]] := Block[{
 Options[LambdaTreeDiagram] = Join[Options[LambdaDiagram], Options[LambdaTree]]
 
 LambdaTreeDiagram[lambda_, opts : OptionsPattern[]] := Block[{diagram = 
-    LambdaDiagram[lambda, FilterRules[{opts}, Options[LambdaDiagram]], "Dots" -> False],
+    LambdaDiagram[lambda, "Tooltips" -> True, FilterRules[{opts}, Options[LambdaDiagram]], "Dots" -> False],
 	alternativeQ = TrueQ[OptionValue["Alternative"]],
 	tree, graph, vertices,
 	treePositionMap, pos1, pos2, permutation, coords

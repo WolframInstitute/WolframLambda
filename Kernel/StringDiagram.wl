@@ -44,17 +44,16 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{lambdaSize = Opti
         FilterRules[{opts}, Options[DiagramArrange]],
         "LoopDiagrams" -> False, "WireLabels" -> False, "Rotate" -> Top, 
         Alignment -> Center, Dividers -> False,
-        "RowSort" -> True, Direction -> Up,
-        ImageSize -> {Automatic, imageSize}
-    ] // (d |-> DiagramMap[
-        Diagram[#, "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"],
+        "RowSort" -> True, Direction -> Up
+    ] // (d |-> DiagramMap[Diagram[#, "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"]] &] @ DiagramArrange @ DiagramMap[
+        Diagram[#, 
             Switch[#["Name"],
                 HoldForm[""],
-                {"Shape" -> "Triangle", "Style" -> StandardPurple, "Width" -> 1, "Height" -> 1},
+                {"Shape" -> "Triangle", "Style" -> Hue[0.709, 0.445, 0.894], "FloatingPorts" -> True, "Width" -> 1, "Height" -> 1},
                 HoldForm[Style[Subscript["\[Lambda]", _], ___]],
                 With[{size = lambdaSize DiagramGridHeight[d]}, {"Width" -> size / GoldenRatio, "Height" -> size}],
                 _,
-                {}
+                Unevaluated[]
             ]
         ] &,
         d
@@ -63,7 +62,7 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{lambdaSize = Opti
 
 Options[SmoothLambdaStringDiagram] = Options[SmoothGraphicsCurves]
 
-SmoothLambdaStringDiagram[lambda_, n : _ ? NumericQ : .1, m : _Integer ? Positive : 5, opts : OptionsPattern[]] /; 0 <= n <= 1 := 
+SmoothLambdaStringDiagram[lambda_, n : _ ? NumericQ : 0, m : _Integer ? Positive : 5, opts : OptionsPattern[]] /; 0 <= n <= 1 := 
     SmoothGraphicsCurves[
         DiagramGrid[LambdaStringDiagram[lambda, FilterRules[{opts}, Options[LambdaStringDiagram]]], PlotInteractivity -> False], n, m,
         FilterRules[{opts}, Options[SmoothGraphicsCurves]]

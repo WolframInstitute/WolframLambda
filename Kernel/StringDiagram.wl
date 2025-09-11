@@ -36,9 +36,18 @@ SmoothGraphicsCurves[g_, n : _ ? NumericQ : .5, m : _Integer ? Positive : 5, opt
     Show[Graphics[{OptionValue["WireStyle"], Haloing[], Arrow @ SmoothPoints[#, n, m]} & /@ ConnectCurves[curves]], h, FilterRules[{opts}, Options[Graphics]]]
 ]
 
-Options[LambdaStringDiagram] = Join[{"LambdaSize" -> .33}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram], Options[DiagramArrange], Options[SmoothGraphicsCurves]]
+Options[LambdaStringDiagram] = Join[
+    {"LambdaSize" -> .33, "LambdaLabelStyle" -> FontSize -> 10, "LambdaStyle" -> Automatic},
+    Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram],
+    Options[DiagramArrange],
+    Options[SmoothGraphicsCurves]
+]
 
-LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{lambdaSize = OptionValue["LambdaSize"]},
+LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
+    lambdaSize = OptionValue["LambdaSize"],
+    lambdaStyle = OptionValue["LambdaStyle"],
+    lambdaLabelStyle = OptionValue["LambdaLabelStyle"]
+},
     DiagramArrange[
         ToDiagram[TagLambda[lambda], FilterRules[{opts}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram]]],
         FilterRules[{opts}, Options[DiagramArrange]],
@@ -49,9 +58,13 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{lambdaSize = Opti
         Diagram[#, 
             Switch[#["Name"],
                 HoldForm[""],
-                {"Shape" -> "Triangle", "Style" -> Hue[0.709, 0.445, 0.894], "FloatingPorts" -> True, "Width" -> 1, "Height" -> 1},
+                {"Shape" -> "Triangle", "Style" -> Hue[0.709, 0.445, 1], "FloatingPorts" -> True, "Width" -> 1, "Height" -> 1},
                 HoldForm[Style[Subscript["\[Lambda]", _], ___]],
-                With[{size = lambdaSize DiagramGridHeight[d]}, {"Width" -> size / GoldenRatio, "Height" -> size}],
+                With[{size = lambdaSize * DiagramGridHeight[d]}, {
+                    "Expression" -> Style[#["Name"], lambdaLabelStyle],
+                    If[lambdaStyle === Automatic, {}, "Style" -> lambdaStyle],
+                    "Width" -> size / GoldenRatio, "Height" -> size
+                }],
                 _,
                 Unevaluated[]
             ]

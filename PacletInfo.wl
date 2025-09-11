@@ -4,10 +4,10 @@ PacletObject[
   <|
     "Name" -> "Wolfram/Lambda",
     "Description" -> "Tools for the lambda calculus",
-    "Creator" -> "Nik Murzin",
+    "Creator" -> "Nik Murzin, Willem Nielsen and Stephen Wolfram",
     "License" -> "MIT",
     "PublisherID" -> "Wolfram",
-    "Version" -> "1.1.5",
+    "Version" -> "1.2.0",
     "WolframVersion" -> "14.2+",
     "PrimaryContext" -> "Wolfram`Lambda`",
     "DocumentationURL" -> "https://resources.wolframcloud.com/PacletRepository/resources",

@@ -9,6 +9,7 @@ Get["Evaluation.wl"]
 Get["TreeGraphs.wl"]
 Get["Visualization.wl"]
 Get["Multiway.wl"]
+Get["Convert.wl"]
 Get["Compiled.wl"]
 Get["EntityStore.wl"]
 

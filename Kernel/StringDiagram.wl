@@ -57,7 +57,7 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
     ] // (d |-> DiagramMap[Diagram[#, "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"]] &] @ DiagramArrange @ DiagramMap[
         Diagram[#, 
             Switch[#["Name"],
-                HoldForm[""],
+                HoldForm["Copy"],
                 {"Shape" -> "Triangle", "Style" -> Hue[0.709, 0.445, 1], "FloatingPorts" -> True, "Width" -> 1, "Height" -> 1},
                 HoldForm[Style[Subscript["\[Lambda]", _], ___]],
                 With[{size = lambdaSize * DiagramGridHeight[d]}, {

@@ -18,8 +18,7 @@ ClearAll[
 	EtaReduce,
 
 	BetaReducePath,
-	LambdaPathEvents,
-	LambdaAllPathEvents
+	LambdaPathEvents
 ]
 
 Begin["`Private`"]
@@ -249,13 +248,6 @@ LambdaPathEvents[lambda_, args___] := With[{positions = BetaReducePath[lambda, a
 ]
 
 
-LambdaAllPathEvents[lambda_, args___] := Block[{mwg = LambdaMultiwayGraph[lambda, args], taggedlambda = TagLambda[lambda], paths},
-	paths = Catenate[ResourceFunction["FindPathEdges"][mwg, lambda, #, Infinity, All] & /@ Pick[VertexList[mwg], VertexOutDegree[mwg], 0]];
-	MapThread[
-		Append[DirectedEdge @@ #1, #3 -> #2] &,
-		{Partition[FoldList[MapAt[BetaSubstitute, #1, {#2}] &, taggedlambda, #], 2, 1], #, Range[Length[#]]}
-	] & /@ paths[[All, All, 3, 1]]
-]
 
 
 End[]

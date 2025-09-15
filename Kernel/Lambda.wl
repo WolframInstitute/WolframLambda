@@ -93,7 +93,7 @@ $LambdaTreeColorRules := Join[
 	Normal[$LambdaStyles]
 ]
 
-$LambdaGridStyleRules = {Background -> {{GrayLevel[0.93], {GrayLevel[0.98]}}}, ItemStyle -> {{Italic}, Automatic}, Frame -> All, FrameStyle -> GrayLevel[0.75], Spacings -> {.75, .6}}
+$LambdaGridStyleRules = {Background -> {{GrayLevel[0.93]}, {GrayLevel[0.968]}, {{1, 1} -> GrayLevel[0.93]}}, ItemStyle -> {{Italic}, Automatic}, Frame -> All, FrameStyle -> GrayLevel[0.75], Spacings -> {.75, .6}}
 
 LambdaCombinator[expr_, ruleSpec_String : "SK"] := Block[{T, rules = Characters[ruleSpec]},
 	T[x_] := x;

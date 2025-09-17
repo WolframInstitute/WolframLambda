@@ -46,13 +46,13 @@ ClearAll[
 ]
 
 If[ ! ValueQ[$Lambda],
-	$Lambda = \[FormalLambda]
+	$Lambda = Global`\[Lambda]
 ]
 
 Begin["`Private`"];
 
 
-$LambdaHead = $Lambda | Global`\[Lambda] | "\[Lambda]" | Style["\[Lambda]", ___]
+$LambdaHead = $Lambda | \[FormalLambda] | (sym_Symbol /; Developer`SymbolQ[Unevaluated[sym]] && SymbolName[Unevaluated[sym]] == "\[Lambda]") | "\[Lambda]" | Style["\[Lambda]", ___]
 
 $LambdaPattern = $LambdaHead | Interpretation["\[Lambda]" | Style["\[Lambda]", ___], _]
 

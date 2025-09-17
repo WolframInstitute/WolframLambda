@@ -643,13 +643,14 @@ $ReduceFunction = "BetaReduce" | "BetaReduceInner" | "BetaReduceApplicative" | "
 $SizeFunction = "LeafCount" | "BLCsize" | "LeafCountIterative" | "BLCsizeIterative"
 
 BetaReduceCompiled[expr_, n : _Integer : Infinity, reduce : $ReduceFunction : "BetaReduce"] :=
-    NestWhile[GetCompiledFunction[reduce][#[[1]]] &, {expr /. $LambdaHead -> \[FormalLambda], True}, #[[2]] &, 1, n][[1]]
+    NestWhile[GetCompiledFunction[reduce][#[[1]]] &, {expr /. $LambdaHead -> \[FormalLambda], True}, #[[2]] &, 1, n][[1]] /. \[FormalLambda] -> $Lambda
 
 BetaReduceListCompiled[expr_, n : _Integer | Infinity : Infinity, reduce : $ReduceFunction : "BetaReduce"] :=
-    NestWhileList[GetCompiledFunction[reduce][#[[1]]] &, {expr /. $LambdaHead -> \[FormalLambda], True}, #[[2]] &, 1, n][[All, 1]]
+    NestWhileList[GetCompiledFunction[reduce][#[[1]]] &, {expr /. $LambdaHead -> \[FormalLambda], True}, #[[2]] &, 1, n][[All, 1]] /. \[FormalLambda] -> $Lambda
 
 BetaReduceSizesCompiled[expr_, n : _Integer | UpTo[_Integer] : UpTo[2 ^ ($SystemWordLength - 1) - 1], reduce : $ReduceFunction : "BetaReduce", size : $SizeFuntcion : "LeafCountIterative"] :=
-    GetCompiledFunction["BetaReduceSizes"][expr /. $LambdaHead -> \[FormalLambda], n, GetCompiledFunction[size], GetCompiledFunction[reduce]]
+	GetCompiledFunction["BetaReduceSizes"][expr /. $LambdaHead -> \[FormalLambda], n, GetCompiledFunction[size], GetCompiledFunction[reduce]] //
+			MapAt[ReplaceAll[\[FormalLambda] -> $Lambda], 1] 
 
 ResourceFunction["AddCodeCompletion"]["BetaReduceCompiled"][None, None, List @@ $ReduceFunction]
 ResourceFunction["AddCodeCompletion"]["BetaReduceListCompiled"][None, None, List @@ $ReduceFunction]

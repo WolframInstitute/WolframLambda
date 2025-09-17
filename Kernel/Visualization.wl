@@ -597,7 +597,7 @@ LambdaTreeDiagram[lambda_, opts : OptionsPattern[]] := Block[{diagram =
 								"Variable", 
 									If[len == 0 && alternativeQ, RegionCentroid[l] + {0, .1}, l[[1, 1]] - {0, 1/2}],
 								"Lambda",
-									If[len == 0, {0, 0}, RegionCentroid[l] + {-len/2, 0}],
+									If[len == 0, RegionCentroid[l], RegionCentroid[l] + {-len/2, 0}],
 								_,
 									RegionCentroid[l]
 							]

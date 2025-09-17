@@ -9,7 +9,7 @@ ClearAll[
 ]
 
 
-Begin["`Private`"]
+Begin["`Private`Compiled`"]
 
 offsetFree[expr_, offset_, depth_] := If[offset == 0, expr,
   	With[{head = expr[[0]]},
@@ -632,6 +632,10 @@ $CompiledFunctions := $CompiledFunctions = Enclose[
         ]
 	|>, TargetSystem -> Automatic] &
 ]
+
+End[]
+
+Begin["`Private`"]
 
 GetCompiledFunction[name_String] := Once[$CompiledFunctions[name]]
 

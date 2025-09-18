@@ -4,6 +4,7 @@ ClearAll[
 	$Lambda,
 	ClosedLambdaQ,
 	BetaNormalQ,
+	LambdaFreeVariables,
 	
 	LambdaCombinator,
 	CombinatorLambda,
@@ -286,11 +287,13 @@ ParseVariableLambda[str_String, vars_Association : <||>] := First @ StringCases[
 	var : WordCharacter .. :> Interpretation[Evaluate[Replace[var, vars]], var]
 }]
 
-ParseIndexLambda[str_String] := First[StringCases[str, {
-	WhitespaceCharacter ... ~~ "\[Lambda]" ~~ WhitespaceCharacter ... ~~ body__ ~~ WhitespaceCharacter ... :> $Lambda[ParseIndexLambda[body]],
-	f__ ~~ WhitespaceCharacter .. ~~ x__ /; BalancedParenthesesQ[f] && BalancedParenthesesQ[x] :> ParseIndexLambda[f][ParseIndexLambda[x]],
-	WhitespaceCharacter ... ~~ "(" ~~ term__ ? BalancedParenthesesQ ~~ ")" ~~ WhitespaceCharacter ... :> ParseIndexLambda[term],
-	WhitespaceCharacter ... ~~ var : DigitCharacter .. ~~ WhitespaceCharacter ... :> Interpreter["Integer"][var]
+ParseIndexLambda[str_String, depth_Integer : 0] := First[StringCases[str, {
+	WhitespaceCharacter ... ~~ "\[Lambda]" ~~ WhitespaceCharacter ... ~~ body__ ~~ WhitespaceCharacter ... :> $Lambda[ParseIndexLambda[body, depth + 1]],
+	WhitespaceCharacter ... ~~ "(" ~~ term__ ? BalancedParenthesesQ ~~ ")" ~~ WhitespaceCharacter ... :> ParseIndexLambda[term, depth],
+	f__ ~~ (WhitespaceCharacter | "(") ..  ~~ x__ /; BalancedParenthesesQ[f] && BalancedParenthesesQ[x] :> ParseIndexLambda[f, depth][ParseIndexLambda[x, depth]],
+	WhitespaceCharacter ... ~~ var : DigitCharacter .. ~~ WhitespaceCharacter ... :> With[{x = Interpreter["Integer"][var]},
+		If[StringLength[var] > 1 && x > depth, Fold[Construct, IntegerDigits[x]], x]
+	]
 }], StringTrim[str]]
 
 ParseLambda[str_String, form_String : "Variables"] := Switch[form,

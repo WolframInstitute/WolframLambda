@@ -16,7 +16,7 @@ Begin["`Private`"]
 
 constructGroupings = Function[Groupings[#, Construct -> 2]]
 
-EnumerateLambdas[maxDepth_Integer : 2, maxLength_Integer : 2, depth_Integer : 1, partsQ_ : True] :=
+EnumerateLambdas[maxDepth_Integer : 2, maxLength_Integer : 2, depth_Integer : 1, partsQ_ : True] := EnumerateLambdas[maxDepth, maxLength, depth, partsQ] =
 	Catenate @ Map[
 		constructGroupings @ Tuples[
 			$Lambda /@ If[ depth == maxDepth,
@@ -29,6 +29,7 @@ EnumerateLambdas[maxDepth_Integer : 2, maxLength_Integer : 2, depth_Integer : 1,
 ]
 
 enumerateLambdas[limit : _Integer | UpTo[_Integer] : 1, n_Integer, vars_List : {}, depth_Integer : 1, partsQ : _ ? BooleanQ : True] :=
+	enumerateLambdas[limit, n, vars, depth, partsQ] =
 	If[ n == 0,
 		constructGroupings[Permutations[vars]],
 		Join[
@@ -80,7 +81,7 @@ EnumerateSizeLambdas[
 	varSize_Integer : 0,
 	depth_Integer : 1,
 	partsQ : _ ? BooleanQ : True
-] := Join[
+] := EnumerateSizeLambdas[size, lambdaSize, appSize, varSize, depth, partsQ] = Join[
 	$Lambda /@ Catenate @ Map[m |->
 		Catenate @ Map[
 			Catenate[constructGroupings /@ Tuples @

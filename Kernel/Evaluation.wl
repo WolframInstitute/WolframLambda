@@ -254,7 +254,7 @@ LambdaPathEvents[lambda_, args___] := With[{positions = BetaReducePath[lambda, a
 
 Options[FindMinimalLambdaCombinator] =
 	DeleteDuplicatesBy[First] @ Join[
-		{TimeConstraint -> 10, MaxSteps -> 100, "MaxSize" -> 100, "IncludeArguments" -> False, "Parallel" -> False},
+		{TimeConstraint -> 1, MaxSteps -> 100, "MaxSize" -> 100, "IncludeArguments" -> False, "Parallel" -> False},
 		Options[BetaReduce],
 		Options[ResourceFunction["CombinatorFixedPoint"]]
 	];
@@ -262,40 +262,44 @@ Options[FindMinimalLambdaCombinator] =
 $CombinatorOrder = "Leftmost" | "Rightmost" | "Outermost" | "Innermost";
 
 FindMinimalLambdaCombinator[lambda_,
-	maxSize : _Integer | Automatic : Automatic,
+	maxSize : _Integer | {__Integer} | Automatic : Automatic,
 	n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1,
 	scheme : {$CombinatorOrder, $CombinatorOrder} | {$CombinatorOrder, $CombinatorOrder, _Integer | Infinity} : {"Leftmost", "Outermost"},
 	i_Integer : 1,
 	opts : OptionsPattern[]
 ] :=
 Enclose @ Block[{
-	term, j = i, args = {},
+	term, termArg, j = i, args = {},
 	lambdaOptions = FilterRules[{opts}, Options[BetaReduce]],
 	combinatorOptions = FilterRules[{opts}, Options[ResourceFunction["CombinatorFixedPoint"]]],
 	includeArgsQ = TrueQ[OptionValue["IncludeArguments"]],
 	timeConstraint = OptionValue[TimeConstraint]
 },
 	Confirm @ TimeConstrained[
-		term = BetaReduce[UntagLambda[lambda], n, m, lambdaOptions];
-		Until[BetaNormalQ[term[\[FormalX]]],
+		term = termArg = BetaReduce[UntagLambda[lambda], n, m, lambdaOptions];
+		Until[BetaNormalQ[termArg[\[FormalX]]],
 			AppendTo[args, AlphabetString[j++]];
-			term = BetaReduce[term[args[[-1]]], n, m, lambdaOptions];
+			termArg = BetaReduce[termArg[args[[-1]]], n, m, lambdaOptions];
 		],
 		timeConstraint
 	];
 
-	term = term /. l : $LambdaHead[_] :> Confirm @ FindMinimalLambdaCombinator[l, maxSize, n, m, scheme, j, opts];
-	If[FreeQ[term, Alternatives @@ args], Sow[args, "Arguments"]; Return[ResourceFunction["CombinatorFixedPoint"][LambdaCombinator[lambda], scheme, combinatorOptions]]];
+	termArg = termArg /. l : $LambdaHead[_] :> Confirm @ FindMinimalLambdaCombinator[l, maxSize, n, m, scheme, j, "IncludeArguments" -> False, opts];
+	If[ ! ContainsOnly[Cases[termArg, Except[CombinatorK | CombinatorS], {-1}, Heads -> True], args],
+		Sow[args, "Arguments"];
+		Return[If[includeArgsQ, Fold[Construct, #, args] &, Identity] @ ResourceFunction["CombinatorFixedPoint"][LambdaCombinator[term], scheme, combinatorOptions]]
+	];
 	
-	Block[{step, combs, total, found = Missing["NotFound", term], parallelQ = TrueQ[OptionValue["Parallel"]]},
+	Block[{step, combs, total, found = Missing["NotFound", termArg], parallelQ = TrueQ[OptionValue["Parallel"]]},
 		If[ parallelQ,
-			SetSharedVariable[step, Unevaluated[found], Unevaluated[args], Unevaluated[term], Unevaluated[combinatorOptions], Unevaluated[timeConstraint], Unevaluated[includeArgsQ]]
+			SetSharedVariable[step, Unevaluated[found], Unevaluated[args], Unevaluated[termArg], Unevaluated[combinatorOptions], Unevaluated[timeConstraint], Unevaluated[includeArgsQ]]
 		];
 		Do[
 			If[! MissingQ[found], Break[]];
 			step = 0;
 			combs = ResourceFunction["EnumerateCombinators"][k];
 			total = Length[combs];
+			If[total == 0, Continue[]];
 			Progress`EvaluateWithProgress[
 				If[k > 5 && parallelQ, ParallelDo, Do][
 					CheckAbort[
@@ -303,7 +307,7 @@ Enclose @ Block[{
 						step++;
 						With[{combTerm = Fold[Construct, comb, args]},
 							If[
-								term === TimeConstrained[
+								termArg === TimeConstrained[
 									ResourceFunction["CombinatorFixedPoint"][
 										combTerm,
 										scheme,
@@ -324,7 +328,7 @@ Enclose @ Block[{
 				<|"Text" -> StringTemplate["Searching size-`` combinators"][k], "Percentage" :> step / total, "ElapsedTime" -> Automatic, "RemainingTime" -> Automatic|>
 			];
 			,
-			{k, Replace[maxSize, Automatic :> LeafCount[LambdaCombinator[lambda]]]}
+			{k, Replace[maxSize, Automatic :> LeafCount[ResourceFunction["CombinatorFixedPoint"][LambdaCombinator[term], scheme, combinatorOptions]]]}
 		];
 			
 		Sow[args, "Arguments"];
@@ -336,40 +340,45 @@ Enclose @ Block[{
 Options[FindMinimalCombinatorLambda] = Options[FindMinimalLambdaCombinator]
 
 FindMinimalCombinatorLambda[comb_,
-	maxSize : _Integer | Automatic : Automatic,
+	maxSize : _Integer | {__Integer} | Automatic : Automatic,
 	n : _Integer | Infinity : Infinity, m : _Integer | Infinity : 1,
 	scheme : {$CombinatorOrder, $CombinatorOrder} | {$CombinatorOrder, $CombinatorOrder, _Integer | Infinity} : {"Leftmost", "Outermost"},
 	i_Integer : 1,
 	opts : OptionsPattern[]
 ] :=
 Enclose @ Block[{
-	term, j = i, args = {},
+	term, termArg, j = i, args = {},
 	lambdaOptions = FilterRules[{opts}, Options[BetaReduce]],
 	combinatorOptions = FilterRules[{opts}, Options[ResourceFunction["CombinatorFixedPoint"]]],
 	includeArgsQ = TrueQ[OptionValue["IncludeArguments"]],
 	timeConstraint = OptionValue[TimeConstraint]
 },
 	Confirm @ TimeConstrained[
-		term = ResourceFunction["CombinatorFixedPoint"][comb, scheme, combinatorOptions];
-		Until[! MatchQ[term, CombinatorK | CombinatorS | (CombinatorK | CombinatorS)[_] | CombinatorS[_][_]],
-			With[{argCount = If[MatchQ[term, CombinatorS[_]], 2, 1]},
+		term = termArg = ResourceFunction["CombinatorFixedPoint"][comb, scheme, combinatorOptions];
+		Until[! MatchQ[termArg, CombinatorK | CombinatorS | (CombinatorK | CombinatorS)[_] | CombinatorS[_][_]],
+			With[{argCount = If[MatchQ[termArg, CombinatorS[_]], 2, 1]},
 				Do[AppendTo[args, AlphabetString[j++]], argCount];
-				term = ResourceFunction["CombinatorFixedPoint"][Fold[Construct, term, args[[- argCount ;;]]], scheme, combinatorOptions]
+				termArg = ResourceFunction["CombinatorFixedPoint"][Fold[Construct, termArg, args[[- argCount ;;]]], scheme, combinatorOptions]
 			];
 		],
 		timeConstraint
 	];
-	term = term /. c : CombinatorS[_][_] | (CombinatorK | CombinatorS)[_] | CombinatorK | CombinatorS :> Confirm @ FindMinimalCombinatorLambda[c, maxSize, n, m, scheme, j, opts];
-	If[FreeQ[term, Alternatives @@ args], Sow[args, "Arguments"]; Return[BetaReduce[CombinatorLambda[comb], n, m, lambdaOptions]]];
-	Block[{step, lambdas, total, found = Missing["NotFound", term], parallelQ = TrueQ[OptionValue["Parallel"]]},
+	termArg = termArg /. c : CombinatorS[_][_] | (CombinatorK | CombinatorS)[_] | CombinatorK | CombinatorS :>
+		Confirm @ FindMinimalCombinatorLambda[c, maxSize, n, m, scheme, j, "IncludeArguments" -> False, opts];
+	If[	! ContainsOnly[LambdaFreeVariables[termArg][[All, 3]], args],
+		Sow[args, "Arguments"];
+		Return[If[includeArgsQ, Fold[Construct, #, args] &, Identity] @ BetaReduce[CombinatorLambda[comb], n, m, lambdaOptions]]
+	];
+	Block[{step, lambdas, total, found = Missing["NotFound", termArg], parallelQ = TrueQ[OptionValue["Parallel"]]},
 		If[ parallelQ,
-			SetSharedVariable[step, Unevaluated[found], Unevaluated[args], Unevaluated[term], Unevaluated[lambdaOptions], Unevaluated[timeConstraint], Unevaluated[includeArgsQ]]
+			SetSharedVariable[step, Unevaluated[found], Unevaluated[args], Unevaluated[termArg], Unevaluated[lambdaOptions], Unevaluated[timeConstraint], Unevaluated[includeArgsQ]]
 		];
 		Do[
 			If[! MissingQ[found], Break[]];
 			step = 0;
 			lambdas = EnumerateSizeLambdas[k];
 			total = Length[lambdas];
+			If[total == 0, Continue[]];
 			Progress`EvaluateWithProgress[
 				If[k > 5 && parallelQ, ParallelDo, Do][
 					CheckAbort[
@@ -377,7 +386,7 @@ Enclose @ Block[{
 						step++;
 						With[{lambdaTerm = Fold[Construct, lambda, args]},
 							If[
-								term === TimeConstrained[
+								termArg === TimeConstrained[
 									BetaReduce[
 										lambdaTerm,
 										n, m,
@@ -398,7 +407,7 @@ Enclose @ Block[{
 				<|"Text" -> StringTemplate["Searching size-`` lambdas"][k], "Percentage" :> step / total, "ElapsedTime" -> Automatic, "RemainingTime" -> Automatic|>
 			];
 			,
-			{k, 2, Replace[maxSize, Automatic :> LeafCount[CombinatorLambda[comb]]]}
+			{k, Replace[maxSize, Automatic :> LeafCount[BetaReduce[CombinatorLambda[term], n, m, lambdaOptions]]]}
 		];
 			
 		Sow[args, "Arguments"];

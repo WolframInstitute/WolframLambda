@@ -23,4 +23,6 @@ Enclose[
     Get["StringDiagram.wl"]
 ]
 
+ResetDirectory[]
+
 End[];

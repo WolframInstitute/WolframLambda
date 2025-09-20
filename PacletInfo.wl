@@ -7,7 +7,7 @@ PacletObject[
     "Creator" -> "Nik Murzin, Willem Nielsen and Stephen Wolfram",
     "License" -> "MIT",
     "PublisherID" -> "Wolfram",
-    "Version" -> "1.2.3",
+    "Version" -> "1.2.5",
     "WolframVersion" -> "14.2+",
     "PrimaryContext" -> "Wolfram`Lambda`",
     "DocumentationURL" -> "https://resources.wolframcloud.com/PacletRepository/resources",

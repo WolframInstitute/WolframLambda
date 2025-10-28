@@ -74,9 +74,14 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
         "RowSort" -> True, Direction -> Up
     ] // (d |-> DiagramMap[
         Diagram[#, 
-            Switch[#["Name"],
+            Switch[#["HoldExpression"],
                 HoldForm["Copy"],
-                {"Shape" -> Switch[#["Arities"], {1, _}, "Triangle", {_, 1}, "UpsideDownTriangle", _, Automatic], "Style" -> Hue[0.709, 0.445, 1], "FloatingPorts" -> True, "Width" -> 1, "Height" -> 1},
+                {
+                    "Shape" -> Switch[#["Arities"], {1, _}, "Triangle", {_, 1}, "UpsideDownTriangle", _, Automatic],
+                    "Style" -> Hue[0.709, 0.445, 1],
+                    "FloatingPorts" -> Switch[#["Arities"], {1, _}, {False, True}, {_, 1}, {True, False}, _, False],
+                    "Width" -> 1, "Height" -> 1
+                },
                 HoldForm[Style[Subscript["\[Lambda]", _], ___]],
                 With[{size = lambdaSize * DiagramGridHeight[d]}, {
                     "Expression" -> Style[#["Name"], lambdaLabelStyle],

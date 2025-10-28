@@ -162,10 +162,14 @@ ClosedLambdaQ[lambda_] := LambdaFreeVariables[lambda] === {}
 tagLambda[tag_] := Interpretation["\[Lambda]", tag]
 tagLambda[e_, tag_] := If[MatchQ[e, $LambdaHead], Interpretation["\[Lambda]", tag], Interpretation[e, tag]]
 
+unchainTag[tag_] := tag //. (_ -> subTag_) :> subTag
+
+simpleTags[expr_] := expr /. Interpretation[base_, tag_] :> Interpretation[base, Evaluate[unchainTag[tag]]]
+
 TagLambda[expr_, lambdas_Association] := With[{
 	nextLambdas = KeyMap[# + 1 &] @ lambdas
 },
-	expr /. {
+	simpleTags[expr] /. {
 		(l : $LambdaHead)[body_][y_] :> With[{newLambda = tagLambda[l, Unique["\[Lambda]"]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]][TagLambda[y, lambdas]]],
 		(l : $LambdaHead)[body_] :> With[{newLambda = tagLambda[l, Unique["\[Lambda]"]]}, newLambda[TagLambda[body, Prepend[1 -> newLambda] @ nextLambdas]]],
 		term_Integer :> Interpretation[term, Evaluate @ If[KeyExistsQ[lambdas, term], lambdas[term][[2]], Max[Keys[lambdas]]]]
@@ -190,7 +194,7 @@ TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = Ta
 	]
 ]
 
-TagLambda[expr_, "Minimal", symbols_] := expr /. lambda : $LambdaHead[_] :> TagLambda[lambda, symbols]
+TagLambda[expr_, "Minimal", symbols_] := simpleTags[expr] /. lambda : $LambdaHead[_] :> TagLambda[lambda, symbols]
 
 TagLambda[expr_, form_String] := TagLambda[expr, "Minimal", Replace[form, "Minimal" -> "Alphabet"]]
 

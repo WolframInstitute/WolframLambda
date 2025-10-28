@@ -4,6 +4,7 @@ Get["Wolfram`DiagrammaticComputation`"]
 
 ClearAll[
     LambdaStringDiagram,
+    LambdaInteractionNet,
     SmoothLambdaStringDiagram
 ]
 
@@ -37,7 +38,10 @@ SmoothGraphicsCurves[g_, n : _ ? NumericQ : .5, m : _Integer ? Positive : 5, opt
 ]
 
 Options[LambdaStringDiagram] = Join[
-    {"LambdaSize" -> .33, "LambdaLabelStyle" -> FontSize -> 10, "LambdaStyle" -> Automatic},
+    {
+        "LambdaSize" -> .33, "LambdaLabelStyle" -> FontSize -> 10, "LambdaStyle" -> Automatic, "LambdaOptions" -> {},
+        "Arrange" -> True, "MultiCopy" -> True, "FlipApplication" -> False
+    },
     Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram],
     Options[DiagramArrange],
     Options[SmoothGraphicsCurves]
@@ -46,32 +50,54 @@ Options[LambdaStringDiagram] = Join[
 LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
     lambdaSize = OptionValue["LambdaSize"],
     lambdaStyle = OptionValue["LambdaStyle"],
-    lambdaLabelStyle = OptionValue["LambdaLabelStyle"]
+    lambdaLabelStyle = OptionValue["LambdaLabelStyle"],
+    lambdaOpts = OptionValue["LambdaOptions"],
+    arrange = If[TrueQ[OptionValue["Arrange"]], DiagramArrange, Identity[#1] &]
 },
-    DiagramArrange[
-        ToDiagram[TagLambda[lambda], FilterRules[{opts}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram]]],
+    arrange[
+        ToDiagram[TagLambda[lambda], FilterRules[{opts}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram]]] //
+            If[ TrueQ[OptionValue["MultiCopy"]], Identity, DiagramCopySplit] //
+            If[ TrueQ[OptionValue["FlipApplication"]],
+                DiagramNetwork @ Map[
+                    If[ #["HoldExpression"] === HoldForm["\[Application]"],
+                        Diagram[#, PortDual @ Last[#["InputPorts"]], Join[Most[#["InputPorts"]], #["OutputPorts"]]],
+                        #
+                    ] &,
+                    #["SubDiagrams"]
+                ] &,
+                Identity
+            ]
+        ,
         FilterRules[{opts}, Options[DiagramArrange]],
-        "LoopDiagrams" -> False, "WireLabels" -> False, "Rotate" -> Top, 
+        "WireLabels" -> False, "Rotate" -> Top, 
         Alignment -> Center, Dividers -> False,
         "RowSort" -> True, Direction -> Up
-    ] // (d |-> DiagramMap[Diagram[#, "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"]] &] @ DiagramArrange @ DiagramMap[
+    ] // (d |-> DiagramMap[
         Diagram[#, 
             Switch[#["Name"],
                 HoldForm["Copy"],
-                {"Shape" -> "Triangle", "Style" -> Hue[0.709, 0.445, 1], "FloatingPorts" -> True, "Width" -> 1, "Height" -> 1},
+                {"Shape" -> Switch[#["Arities"], {1, _}, "Triangle", {_, 1}, "UpsideDownTriangle", _, Automatic], "Style" -> Hue[0.709, 0.445, 1], "FloatingPorts" -> True, "Width" -> 1, "Height" -> 1},
                 HoldForm[Style[Subscript["\[Lambda]", _], ___]],
                 With[{size = lambdaSize * DiagramGridHeight[d]}, {
                     "Expression" -> Style[#["Name"], lambdaLabelStyle],
+                    lambdaOpts,
                     If[lambdaStyle === Automatic, {}, "Style" -> lambdaStyle],
                     "Width" -> size / GoldenRatio, "Height" -> size
                 }],
                 _,
                 Unevaluated[]
-            ]
+            ],
+            "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"]
         ] &,
         d
     ])
 ]
+
+LambdaInteractionNet[l_, opts : OptionsPattern[]] :=
+	LambdaStringDiagram[l, opts,
+		"LambdaOptions" -> {"Shape" -> "Disk", "Width" -> 1 / 2, "Height" -> 1 / 2, "Style" -> LightGray},
+		"AddErasers" -> True, "MultiCopy" -> False, "FlipApplication" -> True, "Rotate" -> False
+	]
 
 Options[SmoothLambdaStringDiagram] = Options[SmoothGraphicsCurves]
 

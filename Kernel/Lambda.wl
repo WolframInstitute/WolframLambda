@@ -162,9 +162,9 @@ ClosedLambdaQ[lambda_] := LambdaFreeVariables[lambda] === {}
 tagLambda[tag_] := Interpretation["\[Lambda]", tag]
 tagLambda[e_, tag_] := If[MatchQ[e, $LambdaHead], Interpretation["\[Lambda]", tag], Interpretation[e, tag]]
 
-unchainTag[tag_] := tag //. (_ -> subTag_) :> subTag
+unchainTags[tag_] := tag //. {(x_ -> subTag_ -> y_) :> With[{z = unchainTags[x][unchainTags[y]]}, Interpretation[z, subTag]], (subTag_ -> y_) :> Interpretation[y, subTag]}
 
-simpleTags[expr_] := expr /. Interpretation[base_, tag_] :> Interpretation[base, Evaluate[unchainTag[tag]]]
+simpleTags[expr_] := expr /. Interpretation[x_, tag_] :> Interpretation[x, Evaluate[unchainTags[tag] //. Interpretation[_[y_, ___], subTag_] :> Interpretation[y, subTag]]]
 
 TagLambda[expr_, lambdas_Association] := With[{
 	nextLambdas = KeyMap[# + 1 &] @ lambdas
@@ -185,7 +185,7 @@ AlphabetString[n_Integer ? NonNegative] := Block[{q, r},
 	AlphabetString[q] <> FromLetterNumber[r]
 ]
 
-TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = TagLambda[expr, "Unique"], vars},
+TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = TagLambda[simpleTags[expr], "Unique"], vars},
 	If[lambda === expr, Return[expr]];
 	vars = Cases[lambda, Interpretation["\[Lambda]" | Style["\[Lambda]", ___], tag_] :> tag, All, Heads -> True];
 	lambda /. MapThread[
@@ -196,11 +196,13 @@ TagLambda[expr_, symbols : _List | Automatic | "Alphabet"] := Block[{lambda = Ta
 
 TagLambda[expr_, "Minimal", symbols_] := simpleTags[expr] /. lambda : $LambdaHead[_] :> TagLambda[lambda, symbols]
 
-TagLambda[expr_, form_String] := TagLambda[expr, "Minimal", Replace[form, "Minimal" -> "Alphabet"]]
+TagLambda[expr_, "Simple"] := TagLambda[expr] //. Interpretation[x_, Interpretation[y_, _]] :> Interpretation[x, y]
 
-TagLambda[expr_] := TagLambda[expr, "Alphabet"]
+TagLambda[expr_, form_String] := TagLambda[simpleTags[expr], "Minimal", Replace[form, "Minimal" -> "Alphabet"]]
 
-ResourceFunction["AddCodeCompletion"]["TagLambda"][None, {"Alphabet", "Unique", "Minimal"}]
+TagLambda[expr_] := TagLambda[simpleTags[expr], "Alphabet"]
+
+ResourceFunction["AddCodeCompletion"]["TagLambda"][None, {"Alphabet", "Unique", "Minimal", "Simple"}]
 
 
 UntagLambda[expr_] := expr /. {Interpretation["\[Lambda]", _] :> $Lambda, Interpretation[x_, _] :> x,  l : $Lambda[_, _] :> FunctionLambda[l]}

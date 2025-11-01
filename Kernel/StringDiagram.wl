@@ -39,7 +39,7 @@ SmoothGraphicsCurves[g_, n : _ ? NumericQ : .5, m : _Integer ? Positive : 5, opt
 
 Options[LambdaStringDiagram] = Join[
     {
-        "LambdaSize" -> .33, "LambdaLabelStyle" -> FontSize -> 10, "LambdaStyle" -> Automatic, "LambdaOptions" -> {},
+        "LambdaSize" -> .33, "LambdaLabelStyle" -> FontSize -> 10, "LambdaStyle" -> Automatic, "LambdaOptions" -> {}, "ApplicationOptions" -> {},
         "Arrange" -> True, "MultiCopy" -> True, "FlipApplication" -> False
     },
     Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram],
@@ -52,6 +52,7 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
     lambdaStyle = OptionValue["LambdaStyle"],
     lambdaLabelStyle = OptionValue["LambdaLabelStyle"],
     lambdaOpts = OptionValue["LambdaOptions"],
+    appOpts = OptionValue["ApplicationOptions"],
     arrange = If[TrueQ[OptionValue["Arrange"]], DiagramArrange, Identity[#1] &]
 },
     arrange[
@@ -60,7 +61,7 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
             If[ TrueQ[OptionValue["FlipApplication"]],
                 DiagramNetwork @ Map[
                     If[ #["HoldExpression"] === HoldForm["\[Application]"],
-                        Diagram[#, PortDual @ Last[#["InputPorts"]], Join[Most[#["InputPorts"]], #["OutputPorts"]]],
+                        Diagram[#, PortDual @ Last[#["InputPorts"]], Join[Most[#["InputPorts"]], #["OutputPorts"]], appOpts],
                         #
                     ] &,
                     #["SubDiagrams"]
@@ -100,7 +101,8 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
 
 LambdaInteractionNet[l_, opts : OptionsPattern[]] :=
 	LambdaStringDiagram[l, opts,
-		"LambdaOptions" -> {"Shape" -> "Disk", "Width" -> 1 / 2, "Height" -> 1 / 2, "Style" -> LightGray},
+		"LambdaOptions" -> {"Shape" -> "Disk", "Width" -> 1 / 2, "Height" -> 1 / 2, "Style" -> LightGray, "FloatingPorts" -> {True, False}},
+        "ApplicationOptions" -> {"FloatingPorts" -> {False, True}},
 		"AddErasers" -> True, "MultiCopy" -> False, "FlipApplication" -> True, "Rotate" -> False
 	]
 

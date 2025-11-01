@@ -96,13 +96,13 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
             "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"]
         ] &,
         d
-    ])
+    ]) // Diagram[#, "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"]] &
 ]
 
 LambdaInteractionNet[l_, opts : OptionsPattern[]] :=
 	LambdaStringDiagram[l, opts,
-		"LambdaOptions" -> {"Shape" -> "Disk", "Width" -> 1 / 2, "Height" -> 1 / 2, "Style" -> LightGray, "FloatingPorts" -> {True, False}},
-        "ApplicationOptions" -> {"FloatingPorts" -> {False, True}},
+		"LambdaOptions" -> {"Shape" -> "UpsideDownTriangle", "Width" -> 1, "Height" -> 1, "Style" -> LightGray, "FloatingPorts" -> {True, False}},
+        "ApplicationOptions" -> {"Shape" -> "Triangle", "Width" -> 1, "Height" -> 1, "FloatingPorts" -> {False, True}},
 		"AddErasers" -> True, "MultiCopy" -> False, "FlipApplication" -> True, "Rotate" -> False
 	]
 

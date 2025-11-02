@@ -39,7 +39,7 @@ SmoothGraphicsCurves[g_, n : _ ? NumericQ : .5, m : _Integer ? Positive : 5, opt
 
 Options[LambdaStringDiagram] = Join[
     {
-        "LambdaSize" -> .33, "LambdaLabelStyle" -> FontSize -> 10, "LambdaStyle" -> Automatic, "LambdaOptions" -> {}, "ApplicationOptions" -> {},
+        "LambdaSize" -> .15, "LambdaLabelStyle" -> FontSize -> 10, "LambdaStyle" -> Automatic, "LambdaOptions" -> {}, "ApplicationOptions" -> {},
         "Arrange" -> True, "MultiCopy" -> True, "FlipApplication" -> False
     },
     Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram],
@@ -70,47 +70,46 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
             ]
         ,
         FilterRules[{opts}, Options[DiagramArrange]],
-        "WireLabels" -> False, "Rotate" -> Top, 
-        Alignment -> Center, Dividers -> False,
-        "RowSort" -> True, Direction -> Up
+        "WireLabels" -> False, "Rotate" -> Top,
+        Alignment -> Center, Direction -> Up
     ] // (d |-> DiagramMap[
         Diagram[#, 
-            Switch[#["HoldExpression"],
-                HoldForm["Copy"],
-                {
-                    "Shape" -> Switch[#["Arities"], {1, _}, "Triangle", {_, 1}, "UpsideDownTriangle", _, Automatic],
-                    "Style" -> Hue[0.709, 0.445, 1],
-                    "FloatingPorts" -> Switch[#["Arities"], {1, _}, {False, True}, {_, 1}, {True, False}, _, False],
-                    "Width" -> 1, "Height" -> 1
-                },
-                HoldForm[Style[Subscript["\[Lambda]", _], ___]],
-                With[{size = lambdaSize * DiagramGridHeight[d]}, {
-                    "Expression" -> Style[#["Name"], lambdaLabelStyle],
-                    lambdaOpts,
-                    If[lambdaStyle === Automatic, {}, "Style" -> lambdaStyle],
-                    "Width" -> size / GoldenRatio, "Height" -> size
-                }],
-                _,
-                Unevaluated[]
-            ],
+            Replace[#["HoldExpression"], {
+                HoldForm["Copy"] :>
+                    {
+                        "Shape" -> Switch[#["Arities"], {1, _}, "RoundedTriangle", {_, 1}, "RoundedUpsideDownTriangle", _, Automatic],
+                        "Style" -> Hue[0.709, 0.445, 1],
+                        "FloatingPorts" -> Switch[#["Arities"], {1, _}, {False, True}, {_, 1}, {True, False}, _, False],
+                        "Width" -> 1, "Height" -> 1
+                    },
+                HoldForm[Subscript["\[Lambda]", _]] :>
+                    With[{size = lambdaSize * DiagramGridHeight[d]}, {
+                        lambdaOpts,
+                        If[lambdaStyle === Automatic, {}, "Style" -> lambdaStyle],
+                        If[lambdaLabelStyle === Automatic, {}, "LambdaStyle" -> lambdaLabelStyle],
+                        "Width" -> size / GoldenRatio, "Height" -> size
+                    }],
+                _ -> Unevaluated[]
+            }],
             "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"]
         ] &,
         d
-    ]) // Diagram[#, "PortLabels" -> None, "PortArrows" -> OptionValue["WireStyle"]] &
+    ]) 
 ]
 
 LambdaInteractionNet[l_, opts : OptionsPattern[]] :=
 	LambdaStringDiagram[l, opts,
-		"LambdaOptions" -> {"Shape" -> "UpsideDownTriangle", "Width" -> 1, "Height" -> 1, "Style" -> LightGray, "FloatingPorts" -> {True, False}},
-        "ApplicationOptions" -> {"Shape" -> "Triangle", "Width" -> 1, "Height" -> 1, "FloatingPorts" -> {False, True}},
-		"AddErasers" -> True, "MultiCopy" -> False, "FlipApplication" -> True, "Rotate" -> False
+		"LambdaOptions" -> {"Shape" -> "RoundedUpsideDownTriangle", "Width" -> 1, "Height" -> 1, "Style" -> LightGray, "FloatingPorts" -> {True, False}},
+        "ApplicationOptions" -> {"Shape" -> "RoundedTriangle", "Width" -> 1, "Height" -> 1, "FloatingPorts" -> {False, True}},
+		"AddErasers" -> True, "MultiCopy" -> False, "FlipApplication" -> True,
+        "Arrange" -> False
 	]
 
 Options[SmoothLambdaStringDiagram] = Options[SmoothGraphicsCurves]
 
 SmoothLambdaStringDiagram[lambda_, n : _ ? NumericQ : 0, m : _Integer ? Positive : 5, opts : OptionsPattern[]] /; 0 <= n <= 1 := 
     SmoothGraphicsCurves[
-        DiagramGrid[LambdaStringDiagram[lambda, FilterRules[{opts}, Options[LambdaStringDiagram]]], PlotInteractivity -> False], n, m,
+        DiagramGrid[LambdaStringDiagram[lambda, FilterRules[{opts}, Options[LambdaStringDiagram]]], PlotInteractivity -> False, "PortLabels" -> False], n, m,
         FilterRules[{opts}, Options[SmoothGraphicsCurves]]
     ] /. {Arrow[{p1_, p2_}] :> Arrow[{p1, p2 + Normalize[p2 - p1]}]}
 

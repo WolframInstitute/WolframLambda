@@ -5,6 +5,7 @@ ClearAll[
 	ClosedLambdaQ,
 	BetaNormalQ,
 	LambdaFreeVariables,
+	LambdaVariables,
 	
 	LambdaCombinator,
 	CombinatorLambda,
@@ -22,6 +23,7 @@ ClearAll[
 
 	LambdaFunction,
 	FunctionLambda,
+	UnscopedLambda,
 
 	LambdaConvert,
 	ParseLambda,
@@ -156,6 +158,8 @@ LambdaFreeVariables[expr_, pos_List : {}, depth_Integer : 0] := Replace[expr, {
 }
 ]
 
+LambdaVariables[expr_] := Keys[Flatten[Reap[LambdaDepths[TagLambda[expr]]][[2]]]]
+
 ClosedLambdaQ[lambda_] := LambdaFreeVariables[lambda] === {}
 
 
@@ -218,12 +222,15 @@ FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 	($LambdaHead | Function)[HoldForm[var_] | var_, body_][x_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, HoldForm[var] -> 1]]][FunctionLambda[Unevaluated[x], vars]],
 	($LambdaHead | Function)[HoldForm[var_] | var_, body_] :> Interpretation["\[Lambda]", var][FunctionLambda[Unevaluated[body], Prepend[vars + 1, HoldForm[var] -> 1]]],
 	(f : Except[HoldForm])[x_] :> FunctionLambda[Unevaluated[f], vars][FunctionLambda[Unevaluated[x], vars]],
-	HoldForm[var : Except[$LambdaHead]] | (var : Except[$LambdaHead]) :> Interpretation[Evaluate[Replace[HoldForm[var], vars]], var]
+	HoldForm[var : Except[$LambdaHead | Null]] | (var : Except[$LambdaHead | Null]) :> Interpretation[Evaluate[Replace[HoldForm[var], vars]], var]
 }]
 
+UnscopedLambda[expr_] := With[{lambda = FunctionLambda[expr]}, {vars = LambdaVariables[lambda]},
+	lambda /. Interpretation[var : HoldForm[_], tag_] /; MemberQ[vars, var] :> Interpretation[0, tag]
+]
 
 LambdaDepths[expr_, depth_Integer : 0] := Replace[expr, {
-	Interpretation["\[Lambda]", tag_][body_] :> (Sow[tag -> depth]; LambdaDepths[body, depth + 1]),
+	Interpretation["\[Lambda]", tag_][body_] :> (Sow[HoldForm[tag] -> depth]; LambdaDepths[body, depth + 1]),
 	f_[arg_] :> (LambdaDepths[f, depth]; LambdaDepths[arg, depth])
 }]
 

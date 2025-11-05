@@ -39,7 +39,7 @@ SmoothGraphicsCurves[g_, n : _ ? NumericQ : .5, m : _Integer ? Positive : 5, opt
 
 Options[LambdaStringDiagram] = Join[
     {
-        "LambdaSize" -> .15, "LambdaOptions" -> {FontSize -> 10}, "ApplicationOptions" -> {},
+        "LambdaSize" -> .15, "LambdaOptions" -> {}, "ApplicationOptions" -> {}, "CopyOptions" -> {},
         "Grid" -> True, "MultiCopy" -> True, "FlipApplication" -> False
     },
     Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram],
@@ -51,16 +51,18 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
     lambdaSize = OptionValue["LambdaSize"],
     lambdaOpts = OptionValue["LambdaOptions"],
     appOpts = OptionValue["ApplicationOptions"],
+    copyOpts = OptionValue["CopyOptions"],
     arrange = If[TrueQ[OptionValue["Grid"]], DiagramArrange, Identity[#1] &]
 },
     arrange[
-        ToDiagram[TagLambda[lambda], FilterRules[{opts}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram]]] //
+        ToDiagram[UnscopedLambda[lambda], FilterRules[{opts}, Options[Wolfram`DiagrammaticComputation`Diagram`ToDiagram`Private`LambdaDiagram]]] //
             If[ TrueQ[OptionValue["MultiCopy"]], Identity, DiagramCopySplit] //
             If[ TrueQ[OptionValue["FlipApplication"]],
                 DiagramMap[
-                    If[ #["HoldExpression"] === HoldForm["\[Application]"],
+                    If[ MatchQ[#["HoldExpression"], HoldForm["\[Application]" | Interpretation[_, "\[Application]"]]],
                         Diagram[#, PortDual @ Last[#["InputPorts"]], Join[Most[#["InputPorts"]], #["OutputPorts"]],
                             appOpts,
+                            "Style" -> Lookup[$LambdaTreeColorRules, "Application"],
                             "PortLabels" -> TakeDrop[Permute[Catenate[#["PortLabels"]], {2, 1}], 1]
                         ],
                         #
@@ -72,20 +74,30 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
         ,
         FilterRules[{opts}, Options[DiagramArrange]],
         "WireLabels" -> False, "Rotate" -> Top,
+        "UnarySpiders" -> False,
         Alignment -> Center, Direction -> Up
     ] // (d |-> DiagramMap[
         Diagram[#, 
             Replace[#["HoldExpression"], {
                 HoldForm["Copy"] :>
                     {
+                        copyOpts,
                         "Shape" -> Switch[#["Arities"], {1, _}, "RoundedTriangle", {_, 1}, "RoundedUpsideDownTriangle", _, Automatic],
                         "Style" -> Hue[0.709, 0.445, 1],
                         "FloatingPorts" -> Switch[#["Arities"], {1, _}, {False, True}, {_, 1}, {True, False}, _, False],
-                        "Width" -> 1, "Height" -> 1
+                        "Width" -> 1, "Height" -> 1,
+                        If[ TrueQ[OptionValue["AddCroissantBrackets"]],
+                            Replace[First[#["InputPorts"]]["HoldName"], {
+                                HoldForm[Interpretation[_[level_Integer], _] | _[level_Integer]] :> {"Expression" :> Interpretation[level, "Copy"], "ShowLabel" -> True},
+                                _ -> {}
+                            }],
+                            {"Expression" :> "Copy", "ShowLabel" -> False}
+                        ]
                     },
-                HoldForm[Subscript["\[Lambda]", _]] :>
+                HoldForm[Subscript["\[Lambda]", _] | Interpretation[_, Subscript["\[Lambda]", _]]] :>
                     With[{size = lambdaSize * DiagramGridHeight[d]}, {
                         lambdaOpts,
+                        "Style" -> Lookup[$LambdaTreeColorRules, "Lambda"],
                         "Width" -> size / GoldenRatio, "Height" -> size
                     }],
                 _ -> Unevaluated[]
@@ -99,10 +111,15 @@ LambdaStringDiagram[lambda_, opts : OptionsPattern[]] := With[{
 LambdaInteractionNet[l_, opts : OptionsPattern[]] :=
 	SimplifyDiagram @ LambdaStringDiagram[l, opts,
 		"LambdaOptions" -> {
-            "Shape" -> "RoundedUpsideDownTriangle", "Width" -> 1, "Height" -> 1,
+            "Width" -> 1, "Height" -> 1,
+            "Shape" -> "RoundedUpsideDownTriangle",
+            "FloatingPorts" -> {True, False}
+        },
+        "ApplicationOptions" -> {
+            "Shape" -> "RoundedTriangle", "Width" -> 1, "Height" -> 1,
             "Style" -> Lookup[$LambdaTreeColorRules, "Lambda"],
-            "FloatingPorts" -> {True, False}},
-        "ApplicationOptions" -> {"Shape" -> "RoundedTriangle", "Width" -> 1, "Height" -> 1, "Style" -> Lookup[$LambdaTreeColorRules, "Lambda"], "FloatingPorts" -> {False, True}},
+            "FloatingPorts" -> {False, True}
+        },
 		"AddErasers" -> True, "MultiCopy" -> False, "FlipApplication" -> True,
         "WireStyle" -> Automatic,
         "UnarySpiders" -> False,

@@ -32,6 +32,7 @@ ClearAll[
 
 	TagLambda,
 	UntagLambda,
+	TagLambdaLevel,
 	LambdaUntag,
 	LambdaDepths,
 	LambdaPositions,
@@ -225,8 +226,17 @@ FunctionLambda[expr_, vars_Association : <||>] := Replace[Unevaluated[expr], {
 	HoldForm[var : Except[$LambdaHead | Null]] | (var : Except[$LambdaHead | Null]) :> Interpretation[Evaluate[Replace[HoldForm[var], vars]], var]
 }]
 
-UnscopedLambda[expr_] := With[{lambda = FunctionLambda[expr]}, {vars = LambdaVariables[lambda]},
-	lambda /. Interpretation[var : HoldForm[_], tag_] /; MemberQ[vars, var] :> Interpretation[0, tag]
+UnscopedLambda[expr_] := With[{lambda = TagLambdaLevel[FunctionLambda[expr]]}, {vars = Replace[LambdaVariables[lambda], HoldForm[tag_[level_Integer]] :> (HoldForm[tag] -> level), 1]},
+	lambda /. Interpretation[var : _HoldForm | _Integer, tag_] :> With[{level = Lookup[vars, HoldForm[tag], -1], depth = Replace[var, _HoldForm -> 0]}, Interpretation[depth, tag[level]]]
+]
+
+TagLambdaLevel[expr_, level_Integer : 0] := Replace[
+	TagLambda[expr],
+	{
+		Interpretation["\[Lambda]", tag_][body_] :> Interpretation["\[Lambda]", tag[level]][TagLambdaLevel[body, level]],
+		f_[x_] :> TagLambdaLevel[f, level][TagLambdaLevel[x, level + 1]],
+		x_ :> x
+	}
 ]
 
 LambdaDepths[expr_, depth_Integer : 0] := Replace[expr, {
